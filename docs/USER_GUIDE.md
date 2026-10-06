@@ -50,4 +50,4 @@ Preferences are stored under `%LOCALAPPDATA%\Aide-de-Camp`. Existing preferences
 
 Application errors are written to `%LOCALAPPDATA%\Aide-de-Camp\Logs`. When reporting an issue, include the app version, the action that failed, and the relevant error text. Review logs before sharing them because they can contain local paths. Do not post game files or personal campaign saves in public issues.
 
-The preview package is unsigned. See [known limits](https://github.com/Rook-US/Aide-de-Camp/blob/master/docs/KNOWN_LIMITS.md) for current validation boundaries.
+The alpha package is unsigned. See [known limits](https://github.com/Rook-US/Aide-de-Camp/blob/master/docs/KNOWN_LIMITS.md) for current validation boundaries.

@@ -21,4 +21,4 @@ Validated locally on Windows x64 on October 5, 2026:
 
 The optional campaign checks read original files and perform edits against temporary copies. Private inputs and machine-specific logs are not included in this repository. The portable-package test verifies its bundled runtime path rather than relying solely on the developer machine's installed .NET runtime.
 
-These checks do not establish that all campaign effects have been accepted by the running game. In-game acceptance and a broader clean-Windows compatibility matrix remain outstanding. The release is marked as a preview for that reason.
+These checks do not establish that all campaign effects have been accepted by the running game. In-game acceptance and a broader clean-Windows compatibility matrix remain outstanding. The release is marked as an alpha for that reason.
