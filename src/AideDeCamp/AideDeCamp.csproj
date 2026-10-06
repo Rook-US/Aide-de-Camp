@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <Version>0.8.10</Version>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Aide-de-Camp</AssemblyName>
+    <RootNamespace>AideDeCamp</RootNamespace>
+    <Product>Aide-de-Camp</Product>
+    <Title>Aide-de-Camp</Title>
+    <Description>Save editor for Grand Tactician: The Civil War</Description>
+    <PublishTrimmed>false</PublishTrimmed>
+  </PropertyGroup>
+</Project>

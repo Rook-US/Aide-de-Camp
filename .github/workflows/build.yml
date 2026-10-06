@@ -1,0 +1,40 @@
+name: Build and verify Windows package
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-latest
+    env:
+      DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+      AIDE_DE_CAMP_DATA: ${{ github.workspace }}/artifacts/test-preferences
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Build
+        run: dotnet build AideDeCamp.sln -c Release
+      - name: Verify services
+        run: dotnet run --project tests/Verification -c Release --no-build
+      - name: Verify WPF interface
+        run: dotnet run --project tests/UiVerification -c Release --no-build
+      - name: Package
+        run: ./scripts/Package.ps1
+      - name: Verify extracted package
+        shell: pwsh
+        run: |
+          $archive = Get-ChildItem artifacts/Aide-de-Camp-*-win-x64.zip | Select-Object -First 1
+          ./scripts/Test-Package.ps1 -Archive $archive.FullName
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Aide-de-Camp-win-x64
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+            artifacts/package-verification.json
+          if-no-files-found: error

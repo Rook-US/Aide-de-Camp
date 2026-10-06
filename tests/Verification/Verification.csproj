@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+ <ItemGroup>
+  <Compile Include="../../src/AideDeCamp/Services/AppPaths.cs" Link="Services/AppPaths.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/ManagementBatchPlanner.cs" Link="Services/ManagementBatchPlanner.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/NationProgression.cs" Link="Services/NationProgression.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/ErrorLog.cs" Link="Services/ErrorLog.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/CampaignRules.cs" Link="Services/CampaignRules.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/RecruitmentProjection.cs" Link="Services/RecruitmentProjection.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/ManagementDocument.cs" Link="Services/ManagementDocument.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/ManagementSnapshot.cs" Link="Services/ManagementSnapshot.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/CardLayoutGeometry.cs" Link="Services/CardLayoutGeometry.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/RosterFields.cs" Link="Services/RosterFields.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/FormationMetrics.cs" Link="Services/FormationMetrics.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/TypedUnitEdit.cs" Link="Services/TypedUnitEdit.cs"/>
+  <Compile Include="../../src/AideDeCamp/Models/OobModels.cs" Link="Models/OobModels.cs"/>
+  <Compile Include="../../src/AideDeCamp/Models/NamingModels.cs" Link="Models/NamingModels.cs"/>
+  <Compile Include="../../src/AideDeCamp/Models/DisplayModels.cs" Link="Models/DisplayModels.cs"/>
+  <Compile Include="../../src/AideDeCamp/Models/BatchEditModels.cs" Link="Models/BatchEditModels.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/UiSettingsService.cs" Link="Services/UiSettingsService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/DisplayMetadataService.cs" Link="Services/DisplayMetadataService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/NamingSchemeService.cs" Link="Services/NamingSchemeService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/EditSession.cs" Link="Services/EditSession.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/EditValidationService.cs" Link="Services/EditValidationService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/BatchEditPlanner.cs" Link="Services/BatchEditPlanner.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/OobDisplayModelService.cs" Link="Services/OobDisplayModelService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/CommandClassificationService.cs" Link="Services/CommandClassificationService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/TextFileBuffer.cs" Link="Services/TextFileBuffer.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/GrandTacticianDataService.cs" Link="Services/GrandTacticianDataService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/WeaponCompatibilityService.cs" Link="Services/WeaponCompatibilityService.cs"/>
+ </ItemGroup>
+</Project>

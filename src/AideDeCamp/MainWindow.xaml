@@ -1,0 +1,264 @@
+<Window x:Class="AideDeCamp.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:models="clr-namespace:AideDeCamp.Models"
+        xmlns:local="clr-namespace:AideDeCamp"
+        Title="Aide-de-Camp 0.8.10" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
+        Background="#11161C" Foreground="#E8EDF2" KeyDown="Window_KeyDown">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#182029"/>
+        <SolidColorBrush x:Key="CardBrush" Color="#252D36"/>
+        <SolidColorBrush x:Key="AccentBrush" Color="#5CA9B5"/>
+        <SolidColorBrush x:Key="MutedBrush" Color="#8E9AA7"/>
+
+
+
+
+
+        <Style x:Key="MetricLabel" TargetType="TextBlock"><Setter Property="Foreground" Value="#93A0AD"/><Setter Property="FontSize" Value="11"/></Style>
+        <Style x:Key="MetricValue" TargetType="TextBlock"><Setter Property="FontFamily" Value="Consolas"/><Setter Property="FontSize" Value="11"/><Setter Property="TextAlignment" Value="Right"/></Style>
+        <Style x:Key="ExpectedValue" TargetType="TextBlock" BasedOn="{StaticResource MetricValue}"><Setter Property="Foreground" Value="#66727E"/></Style>
+
+        <DataTemplate x:Key="CardMetricTemplate">
+            <Border><Border.Style><Style TargetType="Border"><Style.Triggers><DataTrigger Binding="{Binding (ItemsControl.AlternationIndex), RelativeSource={RelativeSource AncestorType=ContentPresenter}}" Value="1"><Setter Property="Background" Value="{DynamicResource MetricStripeBrush}"/></DataTrigger></Style.Triggers></Style></Border.Style><Grid Margin="{DynamicResource MetricRowMargin}"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Tag="Metric" Text="{Binding Label}" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" FontSize="{DynamicResource MetricFontSize}"/>
+                <TextBlock Tag="Metric" Grid.Column="1" Text="{Binding Value}" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" FontSize="{DynamicResource MetricFontSize}" TextAlignment="Right"/>
+            </Grid></Border>
+        </DataTemplate>
+        <DataTemplate x:Key="GroupNodeTemplate" DataType="{x:Type models:GroupNode}">
+            <Grid Width="470" MouseLeftButtonDown="NodeCard_MouseLeftButtonDown" MouseMove="GroupCard_MouseMove" Background="Transparent">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <local:NatoCounterControl x:Name="NatoCounterHost" Grid.Row="0" Width="102" Height="70" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-9" UnitType="{Binding NatoUnitType}" UnitTier="{Binding PresentationTier}" IsHeadquarters="True" StrengthAlertColor="#7EAAB2" Panel.ZIndex="2"/>
+                <Border x:Name="CardSurface" Grid.Row="1" Background="{StaticResource ControlBrush}" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1" CornerRadius="5" Padding="9">
+                    <Border.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"><MenuItem Header="View in Roster" Click="ViewGroupInRoster_Click"/><MenuItem Header="Focus in OOB" Click="FocusNode_Click"/></ContextMenu></Border.ContextMenu>
+                    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <DockPanel x:Name="AlwaysIdentity">
+                            <Button DockPanel.Dock="Left" Content="{Binding CollapseGlyph}" Width="26" Height="24" Padding="0" Margin="0,0,7,0" Click="ToggleGroup_Click" ToolTip="Collapse/restore command"/>
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding IdentityCommander}" FontSize="14" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding IdentitySecondary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <Grid x:Name="DetailBody" Grid.Row="1" Margin="0,6,0,0"><StackPanel>
+                            <ItemsControl AlternationCount="2" ItemsSource="{Binding CardMetrics}" ItemTemplate="{StaticResource CardMetricTemplate}"/>
+                            <TextBlock Text="{Binding TransferSummary}" Foreground="#F2C66D" TextWrapping="Wrap" Margin="0,5,0,0"/>
+                        </StackPanel></Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="CombatUnitTemplate" DataType="{x:Type models:CombatUnitNode}">
+            <Grid Width="360" MouseLeftButtonDown="NodeCard_MouseLeftButtonDown" MouseMove="UnitCard_MouseMove" Background="Transparent">
+                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <local:NatoCounterControl x:Name="NatoCounterHost" Grid.Row="0" Width="92" Height="70" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-9" UnitType="{Binding UnitType}" UnitTier="{Binding PresentationTier}" IsHeadquarters="False" StrengthAlertColor="{Binding ReadinessBrush}" Panel.ZIndex="2"/>
+                <Border x:Name="CardSurface" Grid.Row="1" Background="{Binding CardBackground}" BorderBrush="{Binding CardBorder}" BorderThickness="1" CornerRadius="5" Padding="9">
+                    <Border.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"><MenuItem Header="View in Roster" Click="ViewInRoster_Click"/><MenuItem Header="Focus in OOB" Click="FocusNode_Click"/></ContextMenu></Border.ContextMenu>
+                    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                        <DockPanel x:Name="AlwaysIdentity">
+
+                            <StackPanel>
+                                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding IdentityCommander}" FontSize="14" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding IdentitySecondary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </DockPanel>
+                        <Grid x:Name="DetailBody" Grid.Row="1" Margin="0,6,0,0"><StackPanel>
+                            <ItemsControl AlternationCount="2" ItemsSource="{Binding CardMetrics}" ItemTemplate="{StaticResource CardMetricTemplate}"/>
+                            <TextBlock Text="{Binding ContractRiskLabel}" Foreground="{Binding ContractRiskBrush}" Margin="0,5,0,0"/>
+                        </StackPanel></Grid>
+                    </Grid>
+                </Border>
+            </Grid>
+        </DataTemplate>
+        <DataTemplate x:Key="InspectionTemplate"><Border Background="#202A34" BorderBrush="#7A7054" BorderThickness="1" Padding="12" MouseLeftButtonDown="NodeCard_MouseLeftButtonDown"><StackPanel><TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold"/><TextBlock Text="{Binding TierName}"/><TextBlock Text="{Binding CommanderName}"/><TextBlock Text="Inspection only • Classification / naval data WIP" Foreground="#E9C46A" Margin="0,8,0,0"/></StackPanel></Border></DataTemplate>
+    </Window.Resources>
+
+    <Grid>
+    <!-- Connected measurement surface: inherits the same theme/resources as visible cards. -->
+    <Canvas x:Name="CardMeasureHost" Visibility="Hidden" IsHitTestVisible="False" Width="0" Height="0" ClipToBounds="True"/>
+    <DockPanel>
+        <StackPanel DockPanel.Dock="Top" Background="#172029">
+          <Grid Margin="7,4,7,4" Height="42">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Left">
+              <Button x:Name="GameFolderButton" Content="Game Folder" Click="ChooseGameFolder_Click"/>
+              <TextBlock x:Name="GameFolderStatusText" Text="○" Foreground="#D3A653" VerticalAlignment="Center" Margin="1,0,8,0"/>
+              <Button Content="Select Save" Click="OpenSave_Click"/>
+            </StackPanel>
+            <Viewbox Grid.Column="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Right" Margin="12,0,0,0">
+            <StackPanel x:Name="FixedActions" Orientation="Horizontal" HorizontalAlignment="Right">
+              <Button x:Name="BatchEditButton" Content="Batch Edit" Click="BatchEdit_Click" IsEnabled="False"/>
+              <Button Content="Naming Scheme" Click="NamingScheme_Click"/>
+              <CheckBox x:Name="RegimentalScaleCheck" Content="Regimental scale" Margin="9,0" VerticalAlignment="Center" Foreground="#DCE4EB" ToolTip="Presentation only; native save tier IDs remain unchanged." Checked="OrganizationScaleChanged" Unchecked="OrganizationScaleChanged"/>
+              <Button Content="UI settings" Click="UiSettings_Click"/>
+              <Button x:Name="ReviewDataButton" Content="Review data" Click="ReviewData_Click" ToolTip="Review validation issues. Right-click for unclassified records.">
+                <Button.ContextMenu><ContextMenu><MenuItem Header="Unclassified records" Click="UnknownRoster_Click"/></ContextMenu></Button.ContextMenu>
+              </Button>
+              <Button x:Name="SaveButton" Content="Save changes" Click="Save_Click" MinWidth="105" FontWeight="Bold"/>
+            </StackPanel>
+            </Viewbox>
+          </Grid>
+          <Border Background="#173754" Padding="7,2"><Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left"><StackPanel Orientation="Horizontal">
+            <Button x:Name="UnionButton" Content="UNION" MinWidth="116" Click="Union_Click"/>
+            <Button Content="Armies" Tag="0:Armies" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Garrisons" Tag="0:Garrisons" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Navy" Tag="0:Navy" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Officers" Tag="0:Officers" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Weapons" Tag="0:Weapons" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Nation" Tag="0:Economy" Click="Workspace_Click" MinWidth="80"/>
+          </StackPanel></Viewbox></Border>
+          <Border Background="#34383E" Padding="7,2"><Viewbox Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Left"><StackPanel Orientation="Horizontal">
+            <Button x:Name="ConfederacyButton" Content="CONFEDERACY" MinWidth="116" Click="Confederacy_Click"/>
+            <Button Content="Armies" Tag="1:Armies" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Garrisons" Tag="1:Garrisons" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Navy" Tag="1:Navy" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Officers" Tag="1:Officers" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Weapons" Tag="1:Weapons" Click="Workspace_Click" MinWidth="80"/>
+            <Button Content="Nation" Tag="1:Economy" Click="Workspace_Click" MinWidth="80"/>
+          </StackPanel></Viewbox></Border>
+          <DockPanel Margin="7,3">
+            <StackPanel x:Name="SelectionActions" DockPanel.Dock="Right" Orientation="Horizontal">
+              <TextBlock x:Name="SelectionCountText" Text="0 selected" VerticalAlignment="Center" Margin="8,0"/>
+              <Button Content="Recall batch" Click="RecallBatch_Click" ToolTip="Restore the last batch's units for this faction and workspace."/>
+              <Button Content="Clear selection" Click="ClearSelection_Click"/>
+              <TextBlock x:Name="DirtyIndicator" Foreground="#E9C46A" VerticalAlignment="Center" Margin="8,0"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+              <StackPanel x:Name="LocalViews" Orientation="Horizontal">
+                <Button x:Name="FieldTreeButton" Content="Tree" Click="OobView_Click"/>
+                <Button x:Name="FieldRosterButton" Content="Roster" Click="RosterView_Click"/>
+              </StackPanel>
+              <StackPanel x:Name="NavyViews" Orientation="Horizontal" Visibility="Collapsed">
+                <Button x:Name="DeployedFleetsButton" Content="Deployed fleets" Click="DeployedFleets_Click"/>
+                <Button x:Name="ShipsInPortButton" Content="Ships in port" Click="ShipsInPort_Click"/>
+              </StackPanel>
+              <StackPanel x:Name="NationViews" Orientation="Horizontal" Visibility="Collapsed">
+                <Button Content="States" Tag="States" Click="NationView_Click"/><Button Content="Projects &amp; Funding" Tag="Projects" Click="NationView_Click"/><Button Content="Policies" Tag="Policies" Click="NationView_Click"/>
+              </StackPanel>
+              <TextBlock Text="Search:" VerticalAlignment="Center" Margin="10,0,4,0"/>
+              <TextBox x:Name="SearchBox" Width="200" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown"/>
+            </StackPanel>
+          </DockPanel>
+        </StackPanel>
+
+        <TextBlock x:Name="WorkspaceNotice" DockPanel.Dock="Top" Padding="12,6" Foreground="#E9C46A" Background="#302A20" FontWeight="Bold" Visibility="Collapsed"/>
+        <StatusBar DockPanel.Dock="Bottom" Background="#172029" Foreground="#9BA8B4"><StatusBarItem><TextBlock x:Name="StatusText"/></StatusBarItem></StatusBar>
+
+        <Grid>
+          <Grid x:Name="LandWorkspace">
+            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="5"/><ColumnDefinition Width="330"/></Grid.ColumnDefinitions>
+
+            <Grid Grid.Column="0">
+                <Grid x:Name="OobViewPanel" Background="#0E141A">
+                    <Border x:Name="OobViewport" AllowDrop="True" PreviewDragOver="OobDragOver" PreviewDrop="OobDrop" DragLeave="OobDragLeave" Background="#0E141A" ClipToBounds="True" Focusable="True" PreviewMouseWheel="OobViewport_MouseWheel" MouseDown="OobViewport_MouseDown" MouseMove="OobViewport_MouseMove" MouseUp="OobViewport_MouseUp">
+                        <Grid x:Name="CanvasSurface" ClipToBounds="False">
+                            <Canvas x:Name="ConnectorCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
+                            <Canvas x:Name="NodeCanvas" ClipToBounds="False"/><Canvas x:Name="DragOverlay" IsHitTestVisible="False"/>
+                        </Grid>
+                    </Border>
+                    <Border HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="12" Padding="7" Background="#D9182029" BorderBrush="#3B4854" BorderThickness="1" CornerRadius="4">
+                        <StackPanel Orientation="Horizontal"><ComboBox x:Name="NudgeScope" SelectedIndex="0" Width="85" Margin="3"><ComboBoxItem Content="Branch"/><ComboBoxItem Content="Row"/></ComboBox><Button Content="←" Tag="-20,0" Click="Nudge_Click" ToolTip="Nudge selected branch or row"/><Button Content="→" Tag="20,0" Click="Nudge_Click"/><Button Content="↑" Tag="0,-20" Click="Nudge_Click"/><Button Content="↓" Tag="0,20" Click="Nudge_Click"/><Button Content="Reset nudges" Click="ResetNudges_Click"/>
+                        <Button Content="HOME" Click="FitOob_Click"/><Button Content="FOCUS" Click="FocusSelected_Click"/><TextBlock x:Name="ZoomText" Text="100%" VerticalAlignment="Center" Margin="10,0" Foreground="#8F9DAA"/><TextBlock x:Name="OobDebugText" Text="" VerticalAlignment="Center" Margin="14,0,0,0" Foreground="#607080" FontSize="10"/></StackPanel>
+                    </Border>
+                    <Border HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="12" Padding="9" Background="#E0182029" BorderBrush="#3B4854" BorderThickness="1" CornerRadius="4">
+                        <StackPanel><TextBlock Text="UNIT LIMITS" Foreground="#7EAAB2" FontWeight="SemiBold" FontSize="9"/><TextBlock x:Name="UnitLimitsText" Margin="0,4,0,0" FontFamily="Consolas" FontSize="11"/></StackPanel>
+                    </Border>
+                </Grid>
+
+                <Grid x:Name="RosterViewPanel" Visibility="Collapsed" Background="#10161C" Margin="0">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                    <Border Grid.Row="0" Margin="8,8,8,0" Padding="6" Background="#141C24" BorderBrush="#34414D" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="ROSTER VIEW" VerticalAlignment="Center" Foreground="#8F9DAA" FontWeight="SemiBold" Margin="0,0,10,0"/>
+                            <Button x:Name="RosterListingButton" Content="LISTING" Width="80" Click="RosterListing_Click"/>
+                            <Button x:Name="RosterFlatButton" Content="FLAT" Width="70" Click="RosterFlat_Click"/>
+                            <Button Content="OOB Order / Reset Sort" Width="145" Click="RosterResetSort_Click" Margin="10,3,3,3"/>
+                            <TextBlock Text="Listing preserves hierarchy; Flat sorts globally. Double-click or F2 to edit. Use the context menu to view in OOB." Foreground="#70808E" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="10"/>
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="1" Margin="8,4,8,0" Padding="5" Background="#121920" BorderBrush="#2D3944" BorderThickness="1">
+                        <StackPanel Orientation="Horizontal">
+                            <CheckBox x:Name="FilterHeadquartersCheck" Content="Filter Headquarters" VerticalAlignment="Center" Foreground="#DCE4EB" Checked="RosterFilterChanged" Unchecked="RosterFilterChanged"/>
+                            <TextBlock Text="  •  Edited cells: " Foreground="#7E8B97" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                            <TextBlock Text="● Unsaved" Foreground="#E9B85C" VerticalAlignment="Center"/>
+                            <TextBlock Text="   ✓ Saved this session" Foreground="#72B38B" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                    <DataGrid Grid.Row="2" x:Name="RosterGrid" ContextMenuOpening="RosterContextOpening" Margin="8" Background="#121920" Foreground="#DCE4EB" RowBackground="#172029" AlternatingRowBackground="#141C24" BorderBrush="#34414D"
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" GridLinesVisibility="All" HorizontalGridLinesBrush="#28343F" VerticalGridLinesBrush="#28343F"
+                              HeadersVisibility="Column" CanUserSortColumns="True" Sorting="RosterGrid_Sorting" SelectionChanged="RosterGrid_SelectionChanged" MouseDoubleClick="RosterGrid_MouseDoubleClick">
+                        <DataGrid.ContextMenu><ContextMenu><MenuItem Header="View in OOB" Click="RosterViewInOob_Click"/><MenuItem Header="Open Detail Card" Click="RosterOpenDetail_Click"/><MenuItem Header="Show Changes for Unit" Click="RosterShowChanges_Click"/><Separator/><MenuItem Header="Batch Edit Selected" Click="BatchEdit_Click"/></ContextMenu></DataGrid.ContextMenu>
+                        <DataGrid.Columns>
+                            <DataGridTemplateColumn Header="UNIT / COMMAND" SortMemberPath="Name" Width="240">
+                                <DataGridTemplateColumn.CellTemplate><DataTemplate>
+                                    <Border Background="{Binding NameCellBackground}" ToolTip="{Binding NameChangeTooltip}" Padding="2,1">
+                                    <Grid Margin="{Binding IndentMargin}"><Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                        <TextBlock Grid.Column="0" Text="{Binding RowEditMarker}" Foreground="{Binding RowEditMarkerBrush}" ToolTip="{Binding RowChangeTooltip}" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Content="{Binding TreeGlyph}" Width="16" Height="16" Padding="0" Margin="0,0,2,0" Visibility="{Binding IsGroup, Converter={StaticResource BoolToVisibility}}" Click="RosterToggleGroup_Click"/>
+                                        <TextBlock Grid.Column="2" Text="{Binding Name}" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" FontWeight="{Binding FontWeight}"/>
+                                    </Grid></Border>
+                                </DataTemplate></DataGridTemplateColumn.CellTemplate>
+                            </DataGridTemplateColumn>
+                            <DataGridTextColumn Header="TYPE" SortMemberPath="TypeName" Binding="{Binding TypeName}" Width="90"/>
+                            <DataGridTextColumn Header="HOME STATE" SortMemberPath="HomeStateName" Binding="{Binding HomeStateName}" Width="105"><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding HomeStateCellBackground}"/><Setter Property="ToolTip" Value="{Binding HomeStateChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="COMMAND PATH" SortMemberPath="CommandPath" Binding="{Binding CommandPath}" Width="165"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{StaticResource TextBrush}"/><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="ToolTip" Value="{Binding CommandPath}"/></Style></DataGridTextColumn.ElementStyle><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding CommandPathCellBackground}"/><Setter Property="ToolTip" Value="{Binding CommandPathChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="COMMANDER" SortMemberPath="CommanderName" Binding="{Binding CommanderName}" Width="150"/>
+                            <DataGridTextColumn Header="ASSIGNED FIELD" SortMemberPath="FieldStrength" Binding="{Binding FieldStrengthText}" Width="78"><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding FieldCellBackground}"/><Setter Property="ToolTip" Value="{Binding FieldChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="CAS / UNAVAIL" SortMemberPath="Casualties" Binding="{Binding CasualtiesText}" Width="70"><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding CasualtiesCellBackground}"/><Setter Property="ToolTip" Value="{Binding CasualtiesChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="MAXIMUM" SortMemberPath="Maximum" Binding="{Binding MaximumText}" Width="88"/>
+                            <DataGridTextColumn Header="GUNS" SortMemberPath="Guns" Binding="{Binding GunsText}" Width="90"/>
+                            <DataGridTextColumn Header="STR %" SortMemberPath="StrengthPercent" Binding="{Binding StrengthText}" Width="65"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{Binding StrengthForeground}"/><Setter Property="FontWeight" Value="SemiBold"/></Style></DataGridTextColumn.ElementStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="WEAPON" SortMemberPath="WeaponName" Binding="{Binding WeaponName}" Width="180"><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding WeaponCellBackground}"/><Setter Property="ToolTip" Value="{Binding WeaponChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="RAISED" SortMemberPath="RaisedText" Binding="{Binding RaisedText}" Width="180"/>
+                            <DataGridTextColumn Header="CONTRACT" SortMemberPath="ContractMonths" Binding="{Binding ContractText}" Width="78"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{Binding ContractForeground}"/><Setter Property="FontWeight" Value="SemiBold"/></Style></DataGridTextColumn.ElementStyle><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding ContractCellBackground}"/><Setter Property="ToolTip" Value="{Binding ContractRiskTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="REMAINING" SortMemberPath="ContractRemaining" Binding="{Binding ContractRemainingText}" Width="85"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{Binding RemainingForeground}"/><Setter Property="FontWeight" Value="SemiBold"/></Style></DataGridTextColumn.ElementStyle><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding RemainingCellBackground}"/><Setter Property="ToolTip" Value="{Binding ContractRiskTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="EXP" SortMemberPath="Experience" Binding="{Binding ExperienceText}" Width="65"><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding ExperienceCellBackground}"/><Setter Property="ToolTip" Value="{Binding ExperienceChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="ETA" SortMemberPath="ETA" Binding="{Binding TransferText}" Width="55"><DataGridTextColumn.CellStyle><Style TargetType="DataGridCell" BasedOn="{StaticResource RosterDataGridCell}"><Setter Property="Background" Value="{Binding EtaCellBackground}"/><Setter Property="ToolTip" Value="{Binding EtaChangeTooltip}"/></Style></DataGridTextColumn.CellStyle></DataGridTextColumn>
+                            <DataGridTextColumn Header="READINESS*" SortMemberPath="Readiness" Binding="{Binding ReadinessText}" Width="85"><DataGridTextColumn.ElementStyle><Style TargetType="TextBlock"><Setter Property="Foreground" Value="{Binding ReadinessForeground}"/><Setter Property="FontWeight" Value="SemiBold"/><Setter Property="ToolTip" Value="Independent in-game readiness is not yet mapped; the editor intentionally does not infer it from manpower strength."/></Style></DataGridTextColumn.ElementStyle></DataGridTextColumn>
+                        </DataGrid.Columns>
+                    </DataGrid>
+                </Grid>
+            </Grid>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="#2C3741"/>
+
+            <Grid Grid.Column="2" Background="#171F27">
+                <Grid.RowDefinitions><RowDefinition Height="250"/><RowDefinition Height="5"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                <Border Grid.Row="0" Padding="10" BorderBrush="#303C47" BorderThickness="0,0,0,1">
+                    <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="STRENGTH ALERTS" Foreground="#93A1AE" FontWeight="Bold"/><TextBlock Grid.Column="1" x:Name="AlertSummaryText" HorizontalAlignment="Right" Foreground="#71808E" FontSize="10"/></Grid>
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,6,0,6"><TextBlock x:Name="YellowCountText" Foreground="#E9C46A" Margin="0,0,12,0"/><TextBlock x:Name="OrangeCountText" Foreground="#F29E4C" Margin="0,0,12,0"/><TextBlock x:Name="RedCountText" Foreground="#F05D5E"/></StackPanel>
+                        <ListBox Grid.Row="2" x:Name="AlertList" Background="#111820" BorderBrush="#2F3A45" SelectionChanged="AlertList_SelectionChanged">
+                            <ListBox.ItemTemplate><DataTemplate><Grid Margin="3"><Grid.ColumnDefinitions><ColumnDefinition Width="18"/><ColumnDefinition Width="*"/><ColumnDefinition Width="45"/></Grid.ColumnDefinitions><TextBlock Text="{Binding Icon}" Foreground="{Binding Brush}"/><StackPanel Grid.Column="1"><TextBlock Text="{Binding Name}" FontWeight="SemiBold"/><TextBlock Text="{Binding Path}" Foreground="#748391" FontSize="9" TextTrimming="CharacterEllipsis"/></StackPanel><TextBlock Grid.Column="2" Text="{Binding Percent, StringFormat={}{0}%}" Foreground="{Binding Brush}" FontFamily="Consolas" TextAlignment="Right"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                        </ListBox>
+                    </Grid>
+                </Border>
+                <GridSplitter Grid.Row="1" Height="5" Background="#2C3741" HorizontalAlignment="Stretch"/>
+                <Border Grid.Row="2" Padding="12">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+                        <TextBlock Text="UNIT DETAILS" FontWeight="Bold" Foreground="#93A1AE" Margin="0,0,0,12"/>
+                        <StackPanel x:Name="NoSelectionPanel"><TextBlock Text="Select a combat unit to inspect or edit it." Foreground="#7F8C98" TextWrapping="Wrap"/></StackPanel>
+                        <TextBox x:Name="InspectionText" IsReadOnly="True" TextWrapping="Wrap" Visibility="Collapsed" BorderThickness="0"/>
+                        <StackPanel x:Name="SharedDetailPanel" Visibility="Collapsed"/>
+                    </StackPanel></ScrollViewer>
+                </Border>
+            </Grid>
+          </Grid>
+          <Grid x:Name="ManagementWorkspace" Visibility="Collapsed" Margin="12">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,10"><Button x:Name="EditManagementButton" DockPanel.Dock="Right" Content="Edit selected" Click="EditManagement_Click"/><TextBlock x:Name="ManagementSummary" TextWrapping="Wrap" Foreground="#B9C8D5" VerticalAlignment="Center"/></DockPanel>
+            <StackPanel Grid.Row="1" Orientation="Horizontal">
+              <StackPanel x:Name="TreasuryPanel" Orientation="Horizontal" Margin="0,0,0,8" Visibility="Collapsed"><TextBlock x:Name="TreasuryBalanceText" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="EditTreasuryButton" Margin="12,3,3,3" Content="Edit treasury" Click="EditTreasury_Click"/></StackPanel>
+              <StackPanel x:Name="ManagementBatchActions" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8"><TextBlock x:Name="ManagementSelectionText" VerticalAlignment="Center"/><Button Content="Recall batch" Click="RecallManagementBatch_Click" Margin="12,3,3,3"/><TextBlock Text="Ctrl-click or Shift-click rows to select several" VerticalAlignment="Center" Margin="12,0,0,0"/></StackPanel>
+            </StackPanel>
+            <DataGrid x:Name="ManagementGrid" Grid.Row="2" IsReadOnly="True" AutoGenerateColumns="True" AutoGeneratingColumn="ManagementGrid_AutoGeneratingColumn" MouseDoubleClick="ManagementGrid_MouseDoubleClick" SelectionChanged="ManagementSelection_Changed" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" RowBackground="#172029" AlternatingRowBackground="#141C24" Foreground="#E8EDF2" Background="#11161C"/>
+            <ScrollViewer x:Name="NationBoardViewport" Grid.Row="2" Visibility="Collapsed" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" SizeChanged="NationBoard_SizeChanged">
+              <Grid x:Name="NationBoard"/>
+            </ScrollViewer>
+          </Grid>
+        </Grid>
+    </DockPanel>
+    </Grid>
+</Window>
