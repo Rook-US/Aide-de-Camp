@@ -1,3 +1,7 @@
+# Aide-de-Camp 0.8.13 preview
+
+Search and Edit Selected now occupy the same left-hand toolbar positions across Army, Garrison, Navy, Officer, Weapon, and Nation views. Batch Edit remains beside them where supported. Reselect batch restores the previous batch selection and now explains that it does not undo changes. Batch dialog fields select and highlight themselves when changed, then clear when restored. Project and policy cards show their in-game descriptions directly.
+
 # Aide-de-Camp 0.8.12 preview
 
 Save loading prepares compact and detailed Tree cards for both factions. Zoom reuses those controls and cached measurements instead of rebuilding the entire tree. Individual edits refresh changed cards and ancestor summaries; unchanged metric rows remain alive. Previous measurements remain available for undo/redo. Loading another save or closing clears the cache.

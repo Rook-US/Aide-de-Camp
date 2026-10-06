@@ -172,12 +172,15 @@ internal static partial class Program
             var batch=new BatchEditWindow(units.Take(3).ToArray(),Array.Empty<WeaponOption>(),new BatchEditPlanner(new EditValidationService()));
             T BatchField<T>(string name)=>(T)typeof(BatchEditWindow).GetField(name,BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(batch)!;
             BatchField<TextBox>("_experienceBox").Text="37.5";BatchField<TextBox>("_contractBox").Text="24";
-            BatchField<CheckBox>("_experienceEnabled").IsChecked=true;BatchField<CheckBox>("_contractEnabled").IsChecked=true;
-            Check(batch.Plan is not null && batch.Plan.Units.All(p=>p.Experience==37.5 && p.ContractMonths==24),"Batch dialog combines checked experience and contract fields");
+            Check(BatchField<CheckBox>("_experienceEnabled").IsChecked==true && BatchField<CheckBox>("_contractEnabled").IsChecked==true && batch.Plan is not null && batch.Plan.Units.All(p=>p.Experience==37.5 && p.ContractMonths==24),"Batch dialog selects and plans changed fields automatically");
+            BatchField<TextBox>("_contractBox").Text="12";
+            Check(BatchField<CheckBox>("_contractEnabled").IsChecked==false,"Restoring original batch value clears the field selection");
             batch.Close();
             Invoke("OpenWorkspace",0,"Armies");Invoke("SetView",true);
             var fixedActions=(StackPanel)window.FindName("FixedActions");
-            Check(fixedActions.Children.OfType<ContentControl>().Select(c=>c.Content?.ToString()).SequenceEqual(new[]{"Batch Edit","Naming Scheme","Regimental scale","UI settings","Review data","Save changes"}),"Fixed actions follow the requested order");
+            Check(fixedActions.Children.OfType<ContentControl>().Select(c=>c.Content?.ToString()).SequenceEqual(new[]{"Naming Scheme","Regimental scale","UI settings","Review data","Save changes"}),"Fixed actions follow the requested order");
+            var search=(TextBox)window.FindName("SearchBox");var editSelected=(Button)window.FindName("EditSelectedButton");var batchButton=(Button)window.FindName("BatchEditButton");
+            Check(search.TransformToAncestor(window).Transform(new Point()).X<editSelected.TransformToAncestor(window).Transform(new Point()).X && editSelected.TransformToAncestor(window).Transform(new Point()).X<batchButton.TransformToAncestor(window).Transform(new Point()).X,"Search and Edit Selected keep their shared left toolbar position");
             foreach(var fontScale in new[]{.65,1,2}) foreach(var width in new[]{1150d,1700d}) {
                 ui.Set("theme.text.scale",fontScale);applySettings.Invoke(window,null);
                 window.Width=width;Flush(window);
@@ -201,7 +204,7 @@ internal static partial class Program
                     typeof(MainWindow).GetMethod("OpenWorkspace",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(managementWindow,new object[]{1,workspace});Flush(managementWindow);
                     var managementGrid=(DataGrid)managementWindow.FindName("ManagementGrid");
                     Check(managementGrid.Items.Count>0 && managementGrid.IsReadOnly,workspace+" shows real save records read-only");
-                    Check(((Button)managementWindow.FindName("EditManagementButton")).IsEnabled,workspace+" enables its validated record editor");
+                    Check(((Button)managementWindow.FindName("EditSelectedButton")).Visibility==Visibility.Visible,workspace+" shows the shared record editor action");
                     Check(managementGrid.Columns.Count>0 && managementGrid.ActualHeight>300,workspace+" has visible generated columns and a usable roster");
                     if(workspace=="Economy") {
                         var shownIds=managementGrid.Items.Cast<object>().Select(r=>(int)r.GetType().GetProperty("Id")!.GetValue(r)!).ToArray();
@@ -211,7 +214,9 @@ internal static partial class Program
                     }
                     if(workspace is "Officers" or "Weapons" or "Economy" or "Navy") {
                         var item=managementGrid.Items[0];managementGrid.SelectedItem=item;managementGrid.ScrollIntoView(item);Flush(managementWindow);
+                        Check(((Button)managementWindow.FindName("EditSelectedButton")).IsEnabled,workspace+" enables Edit Selected for a selected record");
                         var rowElement=(DataGridRow)managementGrid.ItemContainerGenerator.ContainerFromItem(item);
+                        bool dirtyBefore=realData.HasUnsavedChanges;
                         bool opened=false;
                         managementWindow.Dispatcher.BeginInvoke(new Action(()=>{
                             var dialog=app.Windows.Cast<Window>().FirstOrDefault(w=>w.Owner==managementWindow);
@@ -220,7 +225,7 @@ internal static partial class Program
                         }),DispatcherPriority.ApplicationIdle);
                         var click=new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=Control.MouseDoubleClickEvent,Source=rowElement};
                         managementGrid.RaiseEvent(click);Flush(managementWindow);
-                        Check(opened && !realData.HasUnsavedChanges,workspace+" row double-click opens its editor; cancel leaves the save unchanged");
+                        Check(opened && realData.HasUnsavedChanges==dirtyBefore,workspace+" row double-click opens its editor; cancel leaves the save unchanged");
                     }
                     var capture=new RenderTargetBitmap((int)managementWindow.ActualWidth,(int)managementWindow.ActualHeight,96,96,PixelFormats.Pbgra32);capture.Render(managementWindow);
                     var encoder=new PngBitmapEncoder();encoder.Frames.Add(BitmapFrame.Create(capture));using var file=File.Create("UI-"+workspace+".png");encoder.Save(file);
@@ -235,7 +240,7 @@ internal static partial class Program
                     var check=Descendants(edit).OfType<CheckBox>().Single(c=>c.Content is TextBlock t && t.Text.StartsWith("Experience"));
                     check.IsChecked=true;
                     ((Grid)check.Parent).Children.OfType<TextBox>().Single().Text="37.5";
-                    Descendants(edit).OfType<Button>().Single(b=>b.Content?.ToString()=="Stage checked changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Descendants(edit).OfType<Button>().Single(b=>b.Content?.ToString()=="Stage changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 }),DispatcherPriority.ApplicationIdle);
                 Check(edit.ShowDialog()==true && edit.Changes!.Single().Value=="37.5" && !realData.Management.HasChanges,"Officer dialog stages checked fields without mutating the document before Apply");
                 var stateId=realData.Management.Records.First(r=>r.Domain=="Economy").Id;

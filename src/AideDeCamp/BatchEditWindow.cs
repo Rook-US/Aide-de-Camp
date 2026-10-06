@@ -24,6 +24,7 @@ public sealed class BatchEditWindow : Window
     private readonly CheckBox _allowUnknownWeapon = new() { Content = "Allow weapon assignment when compatibility is unknown", Margin = new Thickness(155, 4, 0, 2) };
     private readonly TextBlock _preview = new() { Margin = new Thickness(0, 12, 0, 6), Foreground = new SolidColorBrush(Color.FromRgb(180, 195, 208)), TextWrapping = TextWrapping.Wrap };
     private readonly Button _applyButton = new() { Content = "Apply Working Changes", MinWidth = 150, IsDefault = true };
+    private readonly Dictionary<CheckBox, Grid> _rows = new();
 
     public bool Applied { get; private set; }
     public BatchEditPlan? Plan { get; private set; }
@@ -57,11 +58,20 @@ public sealed class BatchEditWindow : Window
         itemStyle.Setters.Add(new Setter(ComboBoxItem.PaddingProperty, new Thickness(6, 4, 6, 4)));
         _weaponCombo.ItemContainerStyle = itemStyle;
         _weaponCombo.ItemsSource = weapons;
-        if (weapons.Count > 0) _weaponCombo.SelectedIndex = 0;
+        static string Common<T>(IReadOnlyList<CombatUnitNode> selected, Func<CombatUnitNode,T> read) {
+            var values=selected.Select(read).Distinct().ToArray();
+            return values.Length==1?Convert.ToString(values[0],CultureInfo.InvariantCulture)??"":string.Empty;
+        }
+        _etaBox.Text=Common(units,u=>u.TransferDays);
+        _contractBox.Text=Common(units,u=>u.ContractMonths);
+        _remainingBox.Text=Common(units,u=>u.ContractRemainingMonths);
+        _experienceBox.Text=Common(units,u=>u.ExperienceRaw);
+        var weaponIds=units.Select(u=>u.WeaponId).Distinct().ToArray();
+        if(weaponIds.Length==1)_weaponCombo.SelectedValue=weaponIds[0];
 
         var root = new StackPanel { Margin = new Thickness(16) };
         root.Children.Add(new TextBlock { Text = $"{units.Count:N0} combat unit{(units.Count == 1 ? "" : "s")} selected", FontSize = 16, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) });
-        root.Children.Add(new TextBlock { Text = "Check multiple fields to change them together. Only checked fields change. Preview and Apply use the same per-unit execution plan; skipped fields are never silently forced.", Foreground = new SolidColorBrush(Color.FromRgb(136, 153, 167)), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
+        root.Children.Add(new TextBlock { Text = "Changing a value selects and highlights its row. Restore the original value to clear it. Mixed values start blank; clearing them leaves that field unchanged. Preview lists skipped fields.", Foreground = new SolidColorBrush(Color.FromRgb(136, 153, 167)), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12) });
 
         root.Children.Add(FieldRow(_etaEnabled, _etaBox, "days"));
         root.Children.Add(FieldRow(_contractEnabled, _contractBox, "months"));
@@ -91,19 +101,26 @@ public sealed class BatchEditWindow : Window
             {
                 if (check == _contractEnabled) _remainingEnabled.IsChecked = false;
                 if (check == _remainingEnabled) _contractEnabled.IsChecked = false;
+                _rows[check].Background=new SolidColorBrush(Color.FromRgb(47,70,69));
                 UpdatePreview();
             };
-            check.Unchecked += (_, _) => UpdatePreview();
+            check.Unchecked += (_, _) => { _rows[check].Background=Brushes.Transparent;UpdatePreview(); };
         }
         _allowUnknownWeapon.Checked += (_, _) => UpdatePreview();
         _allowUnknownWeapon.Unchecked += (_, _) => UpdatePreview();
-        foreach (var box in new[] { _etaBox, _contractBox, _remainingBox, _experienceBox }) box.TextChanged += (_, _) => UpdatePreview();
-        _weaponCombo.SelectionChanged += (_, _) => UpdatePreview();
+        Bind(_etaEnabled,_etaBox,units.Select(u=>(double?)u.TransferDays).ToArray());
+        Bind(_contractEnabled,_contractBox,units.Select(u=>(double?)u.ContractMonths).ToArray());
+        Bind(_remainingEnabled,_remainingBox,units.Select(u=>(double?)u.ContractRemainingMonths).ToArray());
+        Bind(_experienceEnabled,_experienceBox,units.Select(u=>(double?)u.ExperienceRaw).ToArray());
+        _weaponCombo.SelectionChanged += (_, _) => {
+            var weapon=_weaponCombo.SelectedItem as WeaponOption;
+            SetChanged(_weaponEnabled,weapon is not null && _units.Any(u=>u.WeaponId!=weapon.Id));
+        };
         _applyButton.Click += Apply_Click;
         UpdatePreview();
     }
 
-    private static Grid FieldRow(CheckBox enabled, Control editor, string suffix)
+    private Grid FieldRow(CheckBox enabled, Control editor, string suffix)
     {
         var grid = new Grid { Margin = new Thickness(0, 4, 0, 4) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(155) });
@@ -114,6 +131,7 @@ public sealed class BatchEditWindow : Window
         Grid.SetColumn(editor, 1);
         grid.Children.Add(enabled);
         grid.Children.Add(editor);
+        _rows[enabled]=grid;
         if (!string.IsNullOrWhiteSpace(suffix))
         {
             var text = new TextBlock { Text = suffix, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0), Foreground = new SolidColorBrush(Color.FromRgb(130, 146, 160)) };
@@ -121,6 +139,19 @@ public sealed class BatchEditWindow : Window
             grid.Children.Add(text);
         }
         return grid;
+    }
+    private void Bind(CheckBox check,TextBox box,double?[] originals) {
+        box.TextChanged+=(_,_)=>{
+            bool changed=double.TryParse(box.Text,NumberStyles.Float,CultureInfo.InvariantCulture,out var value)
+                ? originals.Any(original=>original is null || Math.Abs(original.Value-value)>0.0000001)
+                : !string.IsNullOrWhiteSpace(box.Text);
+            SetChanged(check,changed);
+        };
+    }
+    private void SetChanged(CheckBox check,bool changed) {
+        check.IsChecked=changed;
+        _rows[check].Background=changed?new SolidColorBrush(Color.FromRgb(47,70,69)):Brushes.Transparent;
+        UpdatePreview();
     }
 
     private void UpdatePreview()

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using AideDeCamp.Services;
 
 namespace AideDeCamp;
@@ -17,9 +18,9 @@ public sealed class ManagementEditWindow:Window
         var root=new DockPanel{Margin=new Thickness(16)};Content=root;
         var actions=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};DockPanel.SetDock(actions,Dock.Bottom);root.Children.Add(actions);
         var cancel=new Button{Content="Cancel",IsCancel=true};actions.Children.Add(cancel);
-        var apply=new Button{Content="Stage checked changes"};actions.Children.Add(apply);
+        var apply=new Button{Content="Stage changes"};actions.Children.Add(apply);
         var panel=new StackPanel();root.Children.Add(new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
-        panel.Children.Add(new TextBlock{Text="Check the fields to change. Changes stay in the editor until Save changes. Ctrl+Z undoes a staged edit.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14)});
+        panel.Children.Add(new TextBlock{Text="Changing a value selects and highlights its row. Restoring the original value clears it. Changes stay in the editor until Save changes; Ctrl+Z undoes a staged edit.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,14)});
         if(records.Count>1)panel.Children.Add(new TextBlock{Text=$"{records.Count} selected records. Checked values apply to all of them; mixed values start blank. Only fields editable for every selected record are shown.\n"+string.Join(", ",records.Take(8).Select(r=>r.Name))+(records.Count>8?"…":""),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
         if(record.Domain=="Officers")panel.Children.Add(new TextBlock{Text="Promotion dates apply to their named rank. They do not promote or reassign the officer. Branch is historical background; Navy can affect assignment eligibility. The game may adjust rank/dates when assigning commands.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
         if(record.Domain=="Weapons")panel.Children.Add(new TextBlock{Text="Stock is a direct grant in pieces, not a paid purchase. Standardization is calculated by the game from its start year, research, stock/equipment and weapon complexity. Editing an existing order changes its delivery rate; delivered quantity, payment and timestamps stay as saved.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
@@ -35,6 +36,18 @@ public sealed class ManagementEditWindow:Window
             else if(field.Key=="Branch") {var combo=new ComboBox{ItemsSource=new[]{"None","Infantry","Cavalry","Artillery","Engineer","Navy"},SelectedIndex=mixed?-1:int.Parse(allValues[0],CultureInfo.InvariantCulture)+1};input=combo;value=()=>(combo.SelectedIndex-1).ToString(CultureInfo.InvariantCulture);}
             else {var box=new TextBox{Text=mixed?"":allValues[0],ToolTip=mixed?"Mixed values — enter one value for all selected records":field.Label};input=box;value=()=>box.Text;}
             Grid.SetColumn(input,1);row.Children.Add(input);panel.Children.Add(row);entries.Add((field,check,value));
+            void SyncChanged() {
+                bool changed;
+                try {
+                    string current=value();
+                    changed=mixed ? input switch {TextBox => !string.IsNullOrWhiteSpace(current),ComboBox choice => choice.SelectedIndex>=0,CheckBox choice => choice.IsChecked is not null,_=>false} : !Equivalent(current,allValues[0]);
+                } catch {changed=true;}
+                check.IsChecked=changed;
+                row.Background=changed?new SolidColorBrush(Color.FromRgb(47,70,69)):Brushes.Transparent;
+            }
+            if(input is TextBox text)text.TextChanged+=(_,_)=>SyncChanged();
+            else if(input is ComboBox combo)combo.SelectionChanged+=(_,_)=>SyncChanged();
+            else if(input is CheckBox toggle){toggle.Checked+=(_,_)=>SyncChanged();toggle.Unchecked+=(_,_)=>SyncChanged();toggle.Indeterminate+=(_,_)=>{check.IsChecked=false;row.Background=Brushes.Transparent;};}
         }
         var error=new TextBlock{TextWrapping=TextWrapping.Wrap,Foreground=System.Windows.Media.Brushes.OrangeRed,Margin=new Thickness(0,10,0,10)};panel.Children.Add(error);
         apply.Click+=(_,_)=>{
@@ -44,4 +57,7 @@ public sealed class ManagementEditWindow:Window
             } catch(Exception ex) {error.Text=ex.Message;}
         };
     }
+    private static bool Equivalent(string left,string right)=>string.Equals(left,right,StringComparison.OrdinalIgnoreCase)
+        || decimal.TryParse(left,NumberStyles.Float,CultureInfo.InvariantCulture,out var a)
+        && decimal.TryParse(right,NumberStyles.Float,CultureInfo.InvariantCulture,out var b) && a==b;
 }

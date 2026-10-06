@@ -19,7 +19,7 @@ The UI suite opens test windows and requires a Windows desktop session. `AIDE_DE
 
 ```powershell
 ./scripts/Package.ps1
-./scripts/Test-Package.ps1 -Archive ./artifacts/Aide-de-Camp-0.8.12-win-x64.zip
+./scripts/Test-Package.ps1 -Archive ./artifacts/Aide-de-Camp-0.8.13-win-x64.zip
 ```
 
 The package includes the .NET and Windows Desktop runtimes, user documentation, and license notices. The script currently pins runtime 8.0.30; use `-RuntimeVersion` to deliberately update it and rerun verification. Keep that pin current when shipping security updates. WPF publishes without trimming, as a folder inside a ZIP. Users extract the whole folder and run the EXE.

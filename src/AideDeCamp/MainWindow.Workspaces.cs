@@ -11,7 +11,7 @@ public partial class MainWindow
     private string _workspace="Armies";
     private bool _portView;
     private string _nationView="States";
-    private void NationView_Click(object sender,RoutedEventArgs e) {if(sender is Button {Tag:string view}){_nationView=view;SearchBox.Text="";RefreshManagement();}}
+    private void NationView_Click(object sender,RoutedEventArgs e) {if(sender is Button {Tag:string view}){_selectedBoardTag=null;_selectedBoardBorder=null;_nationView=view;SearchBox.Text="";RefreshManagement();}}
     private ManagementSnapshot? _management;
     private readonly Dictionary<int,string> _lastWorkspaces=new();
     private readonly Dictionary<string,HashSet<int>> _workspaceSelections=new();
@@ -31,6 +31,7 @@ public partial class MainWindow
         _workspaceRosterModes[WorkspaceKey]=_showRoster;
         if(_workspace=="Navy") _navyPortModes[_nation]=_portView;
         ClearBatchSelection(false);
+        _selectedBoardTag=null;_selectedBoardBorder=null;
         _nation=side;_workspace=workspace;_lastWorkspaces[side]=workspace;
         SearchBox.Text=_workspaceSearches.GetValueOrDefault(WorkspaceKey,"");
         bool land=workspace is "Armies" or "Garrisons" or "Unclassified";
@@ -39,7 +40,6 @@ public partial class MainWindow
         LocalViews.Visibility=land?Visibility.Visible:Visibility.Collapsed;
         NavyViews.Visibility=workspace=="Navy"?Visibility.Visible:Visibility.Collapsed;
         NationViews.Visibility=workspace=="Economy"?Visibility.Visible:Visibility.Collapsed;
-        SelectionActions.Visibility=land?Visibility.Visible:Visibility.Collapsed;
         _portView=_navyPortModes.GetValueOrDefault(side);
         if(land) {
             _category=workspace=="Garrisons"?CommandCategory.Garrison:workspace=="Unclassified"?CommandCategory.Unknown:CommandCategory.FieldCommand;
@@ -73,7 +73,29 @@ public partial class MainWindow
         if(_previousBatches.TryGetValue(WorkspaceKey,out var ids)) {RestoreSelection(ids);StatusText.Text=$"Restored {_selectedUnits.Count} units from this workspace's previous batch.";}
         else StatusText.Text="No previous batch in this workspace for the loaded save.";
     }
-    private void ClearSelection_Click(object sender,RoutedEventArgs e) => ClearBatchSelection();
+    private void ReselectBatch_Click(object sender,RoutedEventArgs e) {
+        if(ManagementWorkspace.Visibility==Visibility.Visible)RecallManagementBatch_Click(sender,e);
+        else RecallBatch_Click(sender,e);
+    }
+    private void ClearSelection_Click(object sender,RoutedEventArgs e) {
+        if(ManagementWorkspace.Visibility==Visibility.Visible) {
+            ManagementGrid.SelectedItems.Clear();
+            _managementSelections[ManagementSelectionKey]=new();
+            SelectBoardCard(null);
+            UpdateManagementSelectionUi();
+        } else ClearBatchSelection();
+    }
+    private void EditSelected_Click(object sender,RoutedEventArgs e) {
+        if(ManagementWorkspace.Visibility==Visibility.Visible) {
+            if(_workspace=="Economy" && (_nationView is "Projects" or "Policies"))EditSelectedBoardCard();
+            else EditManagement_Click(sender,e);
+        } else if(_selectedUnits.Count==1)OpenFloatingDetail(_selectedUnits.Single());
+        else if(_selectedUnits.Count>1)BatchEdit_Click(sender,e);
+        else if(_selectedNode is GroupNode {IsLandCommand:true}) {
+            var editor=SharedDetailPanel.Children.OfType<TextBox>().FirstOrDefault();
+            editor?.BringIntoView();editor?.Focus();editor?.SelectAll();
+        }
+    }
     private void ManagementGrid_AutoGeneratingColumn(object sender,DataGridAutoGeneratingColumnEventArgs e)
     {
         e.Column.Header=System.Text.RegularExpressions.Regex.Replace(e.PropertyName,"(?<=[a-z])(?=[A-Z])"," ");
@@ -84,7 +106,7 @@ public partial class MainWindow
     private void DeployedFleets_Click(object sender,RoutedEventArgs e) {_portView=false;RefreshManagement();}
     private void ShipsInPort_Click(object sender,RoutedEventArgs e) {_portView=true;RefreshManagement();}
     private void ManagementGrid_MouseDoubleClick(object sender,System.Windows.Input.MouseButtonEventArgs e) {
-        if(e.ChangedButton!=System.Windows.Input.MouseButton.Left || _workspace is not ("Officers" or "Weapons" or "Economy" or "Navy") || !EditManagementButton.IsEnabled)return;
+        if(e.ChangedButton!=System.Windows.Input.MouseButton.Left || _workspace is not ("Officers" or "Weapons" or "Economy" or "Navy") || _data.IsReadOnlySave)return;
         if(e.OriginalSource is not DependencyObject source || ItemsControl.ContainerFromElement(ManagementGrid,source) is not DataGridRow row)return;
         ManagementGrid.SelectedItems.Clear();ManagementGrid.SelectedItem=row.Item;
         e.Handled=true;EditManagement_Click(sender,e);
@@ -101,18 +123,15 @@ public partial class MainWindow
     {
         _refreshingManagement=true;
         ManagementBatchActions.Visibility=_workspace is "Officers" or "Weapons" or "Navy"?Visibility.Visible:Visibility.Collapsed;
-        bool board=_workspace=="Economy" && _nationView is "Projects" or "Policies";
+        bool board=_workspace=="Economy" && (_nationView is "Projects" or "Policies");
         NationBoardViewport.Visibility=board?Visibility.Visible:Visibility.Collapsed;
         ManagementGrid.Visibility=board?Visibility.Collapsed:Visibility.Visible;
-        EditManagementButton.Visibility=board?Visibility.Collapsed:Visibility.Visible;
         RememberNationScroll();NationBoard.Children.Clear();NationBoard.ColumnDefinitions.Clear();
         TreasuryPanel.Visibility=_workspace=="Economy"?Visibility.Visible:Visibility.Collapsed;
         EditTreasuryButton.IsEnabled=false;TreasuryBalanceText.Text="National treasury balance: unavailable";
         if(_data.SaveDirectory is null) {ManagementGrid.ItemsSource=null;ManagementSummary.Text="Select a save to browse this workspace.";_refreshingManagement=false;return;}
         _management ??= ManagementSnapshot.Read(_data.SaveDirectory,_data.StateOptions.ToDictionary(s=>s.Id,s=>s.Name),_data.Groups.ToDictionary(g=>g.Key,g=>g.Value.Nation),_data.Management is {} working?working.WorkingLines:null);
         var doc=_data.Management;
-        EditManagementButton.IsEnabled=!_data.IsReadOnlySave && doc?.Records.Any(r=>r.Domain==_workspace)==true;
-        EditManagementButton.Content=_workspace=="Economy"?"Adjust selected states":"Edit selected";
         string search=SearchBox.Text?.Trim()??"";
         bool Match(string name) => name.Contains(search,StringComparison.OrdinalIgnoreCase);
         string faction=_nation==0?"Union":"Confederacy";

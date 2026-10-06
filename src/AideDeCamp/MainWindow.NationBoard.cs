@@ -12,6 +12,22 @@ public partial class MainWindow
     private readonly Dictionary<string,double> _nationScroll=new();
     private static readonly Brush CompletedBrush=new SolidColorBrush(Color.FromRgb(39,101,68));
     private static readonly Brush PendingBrush=new SolidColorBrush(Color.FromRgb(152,111,38));
+    private string? _selectedBoardTag;
+    private Border? _selectedBoardBorder;
+    private void SelectBoardCard(ContentControl? card) {
+        if(_selectedBoardBorder is not null)_selectedBoardBorder.SetResourceReference(Border.BorderBrushProperty,"EdgeBrush");
+        _selectedBoardTag=card?.Tag as string;
+        _selectedBoardBorder=card?.Content as Border;
+        if(_selectedBoardBorder is not null)_selectedBoardBorder.BorderBrush=new SolidColorBrush(Color.FromRgb(142,197,255));
+        UpdateManagementSelectionUi();
+    }
+    private void EditSelectedBoardCard() {
+        if(_selectedBoardTag is null || _data.Progression is null || _data.Management is not {} doc || _data.IsReadOnlySave)return;
+        var parts=_selectedBoardTag.Split(':');
+        if(parts.Length!=2 || !int.TryParse(parts[1],out var id))return;
+        var dialog=new ProgressionWindow(_data.Progression,_nation,id,parts[0]=="Project"){Owner=this};
+        if(dialog.ShowDialog()==true && dialog.Plan is not null)ApplyBoardPlan(dialog.Plan,"Edit "+parts[0].ToLowerInvariant());
+    }
     private void NationBoard_SizeChanged(object sender,SizeChangedEventArgs e)=>SizeNationBoard();
     private void SizeNationBoard() {
         NationBoard.Width=Math.Max(1470,NationBoardViewport.ActualWidth-2);
@@ -27,6 +43,7 @@ public partial class MainWindow
     };
     private void BuildNationBoard(string search) {
         var doc=_data.Management;var progress=_data.Progression;
+        _selectedBoardBorder=null;
         bool projects=_nationView=="Projects";
         bool Match(string text)=>text.Contains(search,StringComparison.OrdinalIgnoreCase);
         for(int category=0;category<6;category++) {
@@ -60,11 +77,16 @@ public partial class MainWindow
             if(items.Children.Count==0)items.Children.Add(new TextBlock{Text=progress is null?"Choose a save and game folder.":"No matching entries",Margin=new Thickness(10),TextWrapping=TextWrapping.Wrap});
         }
         SizeNationBoard();
+        if(_selectedBoardBorder is null)_selectedBoardTag=null;
+        UpdateManagementSelectionUi();
     }
     private ContentControl BoardCard(string tag,StackPanel contents,Action next,string tooltip) {
         var border=new Border{Child=contents,Padding=new Thickness(10),Margin=new Thickness(0,0,0,8),CornerRadius=new CornerRadius(5),BorderThickness=new Thickness(1)};
         border.SetResourceReference(Border.BackgroundProperty,"SurfaceBrush");border.SetResourceReference(Border.BorderBrushProperty,"EdgeBrush");
         var card=new ContentControl{Content=border,Tag=tag,Focusable=true,ToolTip=tooltip,HorizontalContentAlignment=HorizontalAlignment.Stretch};
+        if(tag==_selectedBoardTag){_selectedBoardBorder=border;border.BorderBrush=new SolidColorBrush(Color.FromRgb(142,197,255));}
+        card.PreviewMouseLeftButtonDown+=(_,_)=>SelectBoardCard(card);
+        card.GotKeyboardFocus+=(_,_)=>SelectBoardCard(card);
         System.Windows.Automation.AutomationProperties.SetName(card,tooltip);
         card.MouseDoubleClick+=(_,e)=>{
             if(e.Handled||e.ChangedButton!=MouseButton.Left)return;
@@ -79,6 +101,7 @@ public partial class MainWindow
     private ContentControl ProjectCard(NationProgression.Project project,NationProgression progress) {
         int level=progress.Level(_nation,project.Id);string restriction=progress.ProjectRestriction(project,_nation);
         var content=new StackPanel();content.Children.Add(BoardText(project.Name,true));
+        content.Children.Add(BoardDescription(project.Description));
         content.Children.Add(BoardText(project.Repeating?$"Repeatable · {level} stages completed":level>0?"Unlocked":"Single purchase"));
         var boxes=new WrapPanel();
         int shown=project.Repeating?Math.Min(100,Math.Max(5,level+5)):1;
@@ -100,6 +123,7 @@ public partial class MainWindow
         double value=progress.Progress(_nation,policy.Id);bool complete=value>=1,ready=!complete&&value>=0.999989;
         string restriction=progress.PolicyRestriction(policy,_nation);
         var content=new StackPanel();content.Children.Add(BoardText(policy.Name,true));
+        content.Children.Add(BoardDescription(policy.Description));
         string percent=complete?"100%":ready?"99.999%":Math.Min(99.99,100*value).ToString("0.##",CultureInfo.CurrentCulture)+"%";
         content.Children.Add(BoardText(percent+(complete?" · Completed":ready?" · Ready to finish":" · Research progress")));
         var bar=new ProgressBar{Minimum=0,Maximum=100,Value=Math.Clamp(value*100,0,100),Height=9,Margin=new Thickness(0,2,0,5),Foreground=complete?CompletedBrush:ready?PendingBrush:new SolidColorBrush(Color.FromRgb(77,151,185)),Background=new SolidColorBrush(Color.FromRgb(32,44,55)),Tag=$"Progress:{policy.Id}"};
@@ -107,6 +131,10 @@ public partial class MainWindow
         if(restriction.Length>0)content.Children.Add(BoardText("Pre-war choice · read only"));
         return BoardCard($"Policy:{policy.Id}",content,()=>StageBoardPolicy(policy.Id),policy.Name+"\n"+policy.Description.Replace("\\n","\n")+"\n"+(restriction.Length>0?restriction:"Double-click to set unfinished research and prerequisites to 99.999%. Save and advance campaign time to finish."));
     }
+    private static TextBlock BoardDescription(string description)=>new() {
+        Text=string.IsNullOrWhiteSpace(description)?"No in-game description provided.":description.Replace("\\n","\n").Trim(),TextWrapping=TextWrapping.Wrap,
+        Foreground=new SolidColorBrush(Color.FromRgb(183,198,209)),Margin=new Thickness(0,2,0,8)
+    };
     private void EditBoardFunding(ManagementDocument.Record record) {
         if(_data.Management is not {} doc||_data.IsReadOnlySave)return;
         var dialog=new ManagementEditWindow(doc,record,record.Name+" subsidy funds"){Owner=this};
