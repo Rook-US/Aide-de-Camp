@@ -20,8 +20,13 @@ public partial class MainWindow
         foreach(var row in ManagementGrid.Items.Cast<object>())if(ids.Contains(ManagementId(row)))ManagementGrid.SelectedItems.Add(row);
     }
     private void UpdateManagementSelectionUi() {
-        ManagementSelectionText.Text=$"{ManagementGrid.SelectedItems.Count:N0} selected";
-        if(ManagementWorkspace.Visibility==Visibility.Visible)BatchEditButton.IsEnabled=CanBatchManagement;
+        if(ManagementWorkspace.Visibility!=Visibility.Visible)return;
+        bool board=_workspace=="Economy" && (_nationView is "Projects" or "Policies");
+        SelectionCountText.Text=board?(_selectedBoardTag is null?"0 selected":"1 selected"):$"{ManagementGrid.SelectedItems.Count:N0} selected";
+        EditSelectedButton.IsEnabled=!_data.IsReadOnlySave && (board?_selectedBoardTag is not null:ManagementGrid.SelectedItems.Count>0);
+        BatchEditButton.IsEnabled=CanBatchManagement;
+        ReselectBatchButton.IsEnabled=_workspace is "Officers" or "Weapons" or "Navy";
+        ClearSelectionButton.IsEnabled=board?_selectedBoardTag is not null:ManagementGrid.SelectedItems.Count>0;
     }
     private void RecallManagementBatch_Click(object sender,RoutedEventArgs e) {
         if(!_managementBatches.TryGetValue(ManagementSelectionKey,out var ids)){StatusText.Text="No previous batch for this faction and view.";return;}

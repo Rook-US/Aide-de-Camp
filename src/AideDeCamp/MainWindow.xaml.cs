@@ -1409,6 +1409,12 @@ public partial class MainWindow : Window
         var hiddenCount = _showRoster ? _selectedUnits.Count(u => !visibleIds.Contains(u.UnitId)) : 0;
         SelectionCountText.Text = $"{count:N0} selected" + (hiddenCount > 0 ? $" ({hiddenCount} hidden)" : "");
         BatchEditButton.IsEnabled = ManagementWorkspace.Visibility == Visibility.Visible ? CanBatchManagement : count > 0 && _selectedUnits.All(CanEdit);
+        if(ManagementWorkspace.Visibility == Visibility.Visible)UpdateManagementSelectionUi();
+        else {
+            EditSelectedButton.IsEnabled=count>0 && _selectedUnits.All(CanEdit) || count==0 && _selectedNode is GroupNode {IsLandCommand:true};
+            ReselectBatchButton.IsEnabled=_workspace is "Armies" or "Garrisons";
+            ClearSelectionButton.IsEnabled=count>0;
+        }
         if (!_syncingRosterSelection && _showRoster) RestoreRosterSelection();
     }
 

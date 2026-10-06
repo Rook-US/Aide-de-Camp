@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:AideDeCamp.Models"
         xmlns:local="clr-namespace:AideDeCamp"
-        Title="Aide-de-Camp 0.8.12" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
+        Title="Aide-de-Camp 0.8.13" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
         Background="#11161C" Foreground="#E8EDF2" KeyDown="Window_KeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -93,7 +93,6 @@
             </StackPanel>
             <Viewbox Grid.Column="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Right" Margin="12,0,0,0">
             <StackPanel x:Name="FixedActions" Orientation="Horizontal" HorizontalAlignment="Right">
-              <Button x:Name="BatchEditButton" Content="Batch Edit" Click="BatchEdit_Click" IsEnabled="False"/>
               <Button Content="Naming Scheme" Click="NamingScheme_Click"/>
               <CheckBox x:Name="RegimentalScaleCheck" Content="Regimental scale" Margin="9,0" VerticalAlignment="Center" Foreground="#DCE4EB" ToolTip="Presentation only; native save tier IDs remain unchanged." Checked="OrganizationScaleChanged" Unchecked="OrganizationScaleChanged"/>
               <Button Content="UI settings" Click="UiSettings_Click"/>
@@ -125,11 +124,15 @@
           <DockPanel Margin="7,3">
             <StackPanel x:Name="SelectionActions" DockPanel.Dock="Right" Orientation="Horizontal">
               <TextBlock x:Name="SelectionCountText" Text="0 selected" VerticalAlignment="Center" Margin="8,0"/>
-              <Button Content="Recall batch" Click="RecallBatch_Click" ToolTip="Restore the last batch's units for this faction and workspace."/>
-              <Button Content="Clear selection" Click="ClearSelection_Click"/>
+              <Button x:Name="ReselectBatchButton" Content="Reselect batch" Click="ReselectBatch_Click" ToolTipService.ShowOnDisabled="True" ToolTip="Select the units or records from the last batch selection in this faction and view. This does not undo edits."/>
+              <Button x:Name="ClearSelectionButton" Content="Clear selection" Click="ClearSelection_Click"/>
               <TextBlock x:Name="DirtyIndicator" Foreground="#E9C46A" VerticalAlignment="Center" Margin="8,0"/>
             </StackPanel>
             <StackPanel Orientation="Horizontal">
+              <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,4,0"/>
+              <TextBox x:Name="SearchBox" Width="200" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown"/>
+              <Button x:Name="EditSelectedButton" Content="Edit Selected" Click="EditSelected_Click" IsEnabled="False" Margin="8,3,3,3"/>
+              <Button x:Name="BatchEditButton" Content="Batch Edit" Click="BatchEdit_Click" IsEnabled="False"/>
               <StackPanel x:Name="LocalViews" Orientation="Horizontal">
                 <Button x:Name="FieldTreeButton" Content="Tree" Click="OobView_Click"/>
                 <Button x:Name="FieldRosterButton" Content="Roster" Click="RosterView_Click"/>
@@ -141,8 +144,6 @@
               <StackPanel x:Name="NationViews" Orientation="Horizontal" Visibility="Collapsed">
                 <Button Content="States" Tag="States" Click="NationView_Click"/><Button Content="Projects &amp; Funding" Tag="Projects" Click="NationView_Click"/><Button Content="Policies" Tag="Policies" Click="NationView_Click"/>
               </StackPanel>
-              <TextBlock Text="Search:" VerticalAlignment="Center" Margin="10,0,4,0"/>
-              <TextBox x:Name="SearchBox" Width="200" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown"/>
             </StackPanel>
           </DockPanel>
         </StackPanel>
@@ -252,10 +253,10 @@
           </Grid>
           <Grid x:Name="ManagementWorkspace" Visibility="Collapsed" Margin="12">
             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <DockPanel Margin="0,0,0,10"><Button x:Name="EditManagementButton" DockPanel.Dock="Right" Content="Edit selected" Click="EditManagement_Click"/><TextBlock x:Name="ManagementSummary" TextWrapping="Wrap" Foreground="#B9C8D5" VerticalAlignment="Center"/></DockPanel>
+            <DockPanel Margin="0,0,0,10"><TextBlock x:Name="ManagementSummary" TextWrapping="Wrap" Foreground="#B9C8D5" VerticalAlignment="Center"/></DockPanel>
             <StackPanel Grid.Row="1" Orientation="Horizontal">
               <StackPanel x:Name="TreasuryPanel" Orientation="Horizontal" Margin="0,0,0,8" Visibility="Collapsed"><TextBlock x:Name="TreasuryBalanceText" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="EditTreasuryButton" Margin="12,3,3,3" Content="Edit treasury" Click="EditTreasury_Click"/></StackPanel>
-              <StackPanel x:Name="ManagementBatchActions" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8"><TextBlock x:Name="ManagementSelectionText" VerticalAlignment="Center"/><Button Content="Recall batch" Click="RecallManagementBatch_Click" Margin="12,3,3,3"/><TextBlock Text="Ctrl-click or Shift-click rows to select several" VerticalAlignment="Center" Margin="12,0,0,0"/></StackPanel>
+              <StackPanel x:Name="ManagementBatchActions" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8"><TextBlock Text="Ctrl-click or Shift-click rows to select several" VerticalAlignment="Center"/></StackPanel>
             </StackPanel>
             <DataGrid x:Name="ManagementGrid" Grid.Row="2" IsReadOnly="True" AutoGenerateColumns="True" AutoGeneratingColumn="ManagementGrid_AutoGeneratingColumn" MouseDoubleClick="ManagementGrid_MouseDoubleClick" SelectionChanged="ManagementSelection_Changed" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" RowBackground="#172029" AlternatingRowBackground="#141C24" Foreground="#E8EDF2" Background="#11161C"/>
             <ScrollViewer x:Name="NationBoardViewport" Grid.Row="2" Visibility="Collapsed" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" SizeChanged="NationBoard_SizeChanged">
