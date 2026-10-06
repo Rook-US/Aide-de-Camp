@@ -41,7 +41,16 @@ public abstract class OobNode : INotifyPropertyChanged
     public string CollapseGlyph => IsExpanded ? "−" : "+";
     public int Depth { get; set; }
     public FormationMetrics Metrics => this is GroupNode g ? g.DisplayMetrics : FormationMetrics.For(this);
-    public IReadOnlyList<CardMetric> CardMetrics => Metrics.Lines(this);
+    private IReadOnlyList<CardMetric>? _cardMetricRows;
+    public IReadOnlyList<CardMetric> CardMetrics {
+        get {
+            var rows = Metrics.Lines(this);
+            // Keep ItemsControl rows alive when a broader refresh reports unchanged
+            // values. Only a changed card replaces its metric rows.
+            if (_cardMetricRows is null || !_cardMetricRows.SequenceEqual(rows)) _cardMetricRows = rows;
+            return _cardMetricRows;
+        }
+    }
     public string IdentityCommander => this switch {
         GroupNode g => string.IsNullOrWhiteSpace(g.CommanderDisplayName) ? "Commander unassigned" : g.CommanderDisplayName,
         CombatUnitNode u => string.IsNullOrWhiteSpace(u.CommanderDisplayName) ? "Commander unassigned" : u.CommanderDisplayName, _ => "—" };

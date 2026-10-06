@@ -240,6 +240,7 @@ try
     Check(alertRoot.Metrics.Assigned==100 && alertRoot.Metrics.CombatUnits==1, "Compact totals count a shared combat leaf once");
     Check(alertRoot.CompactAlerts=="1 low strength (1 critical) • 1 in transfer", "Subordinate alerts count a shared leaf once with meaningful labels");
     Check(alertUnit.CompactStrength=="100 men • 0 casualties", "Compact strength labels manpower and casualties independently");
+    Check(ReferenceEquals(alertUnit.CardMetrics, alertUnit.CardMetrics), "Unchanged metrics retain their cached rows");
     OobPresentation.RegimentalScale = true;
     Check(metricDivision.IdentitySecondary.Contains("Brigade") && metricDivision.UnitTier == 14, "Card identity uses presentation scale without mutating native tiers");
     OobPresentation.RegimentalScale = false;

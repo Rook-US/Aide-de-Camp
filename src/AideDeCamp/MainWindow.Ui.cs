@@ -30,7 +30,7 @@ public partial class MainWindow
         ManagementGrid.RowHeight = double.NaN;
         ManagementGrid.MinRowHeight = Ui("roster.density.rowHeight");
         RosterRow.HierarchyIndent = Ui("roster.hierarchy.indent");
-        _nodeMeasuredHeights.Clear(); _nodeSurfaceInsets.Clear(); _nodeMeasureSignatures.Clear();
+        InvalidateCardMeasurements();
         ReflowCardsAtAnchor(); RefreshRoster();
         if (_ui.LoadWarning is not null) StatusText.Text = _ui.LoadWarning;
     }
@@ -43,11 +43,36 @@ public partial class MainWindow
         return width * CardScale;
     }
     private bool _cardReflowQueued;
+    private int _cardWarmupGeneration;
+    private System.Windows.Threading.DispatcherOperation? _cardWarmupOperation;
+    private readonly Dictionary<FrameworkElement, string> _preparedDetailCards = new();
+    private bool _preparingCardDetails;
+
+    private void ScheduleCardDetailWarmup()
+    {
+        var generation = ++_cardWarmupGeneration;
+        _cardWarmupOperation?.Abort(); _cardWarmupOperation = null;
+        if (ShowCardDetails || _allowClose) return;
+        // WPF defers creating metric rows while their parent is Collapsed. Prepare one
+        // retained card per idle callback, allowing input/rendering between cards.
+        // Restore compact visibility before returning; no extra content is displayed.
+        var pending = new Queue<FrameworkElement>(NodeCanvas.Children.OfType<FrameworkElement>());
+        void WarmNext()
+        {
+            if (generation != _cardWarmupGeneration || _allowClose || ShowCardDetails) return;
+            if (!pending.TryDequeue(out var card)) return;
+            if (NodeCanvas.Children.Contains(card)) PrepareCardDetails(card);
+            if (pending.Count > 0) _cardWarmupOperation = Dispatcher.BeginInvoke(new Action(WarmNext), System.Windows.Threading.DispatcherPriority.Background);
+        }
+        _cardWarmupOperation = Dispatcher.BeginInvoke(new Action(WarmNext), System.Windows.Threading.DispatcherPriority.Background);
+    }
+
     private void MonitorRenderedCard(FrameworkElement card)
     {
         // Generated ItemsControl content can finish sizing after the initial measure.
         // A real rendered size always wins over an earlier estimate.
         card.SizeChanged += (_, _) => {
+            if (_preparingCardDetails) return;
             if (card.Tag is not OobNode node || !NodeCanvas.Children.Contains(card)) return;
             var height = Math.Ceiling(card.ActualHeight * NodeCardScale(node));
             if (!double.IsFinite(height) || height <= 0) return;
@@ -56,6 +81,8 @@ public partial class MainWindow
             if (Math.Abs(height - GetNodeHeight(node)) < 1 && Math.Abs(inset - GetSurfaceInset(node)) < 1) return;
             _nodeMeasuredHeights[node] = height;
             _nodeSurfaceInsets[node] = inset;
+            if (_nodeMeasureSignatures.TryGetValue(node, out var signature))
+                _modeFootprints[(node, ShowCardDetails, signature)] = (height, inset);
             if (_cardReflowQueued) return;
             _cardReflowQueued = true;
             Dispatcher.BeginInvoke(new Action(() => {

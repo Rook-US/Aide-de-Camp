@@ -20,6 +20,8 @@ The application targets .NET 8 and WPF. `src/AideDeCamp` contains the applicatio
 
 Tree contours use world-pixel card edges, with half-gutters contributed by adjacent columns. Active compact/detail templates are measured under the window resource tree; later WPF sizing triggers an anchored reflow. The detail threshold governs both content and footprint. Automatic coordinates are calculated before saved Nudge deltas are applied. See [Tree validation](TREE_VALIDATION.md) for spacing semantics, evidence, and regression coverage.
 
+`MainWindow.CardCache.cs` owns retained card controls for the loaded save. Load preparation measures both modes for both factions; content signatures retain prior footprints for undo. Refreshes reconcile existing controls instead of clearing the canvas. Individual unit edits invalidate ancestor aggregates, and unchanged metric rows retain their objects. Font/presentation changes, new-save loading, and closing invalidate the applicable cache; asynchronous preparation is generation-checked. See [cache validation](TREE_CACHE_VALIDATION.md) for timings and lifecycle coverage.
+
 ## Save format principles
 
 Save positions are discovered through counted sections and record structure. They are not universal line numbers: adding records changes later positions. Keep the original text buffer and replace only mapped values or explicitly planned section changes. Do not rewrite unrelated fields or normalize an entire file merely to update one value.

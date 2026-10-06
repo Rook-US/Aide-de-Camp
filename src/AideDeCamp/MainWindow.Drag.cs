@@ -221,9 +221,8 @@ public partial class MainWindow
         var existing = NodeCanvas.Children.OfType<FrameworkElement>().Select(e => e.Tag).OfType<OobNode>().ToHashSet();
         foreach (var node in _visibleCanvasNodes.Where(n => !existing.Contains(n)))
         {
-            var template = (DataTemplate)FindResource(node is GroupNode ? "GroupNodeTemplate" : "CombatUnitTemplate");
-            if (template.LoadContent() is not FrameworkElement element) continue;
-            element.DataContext = node; element.Tag = node; ConfigureCard(element, node); Panel.SetZIndex(element, 10); NodeCanvas.Children.Add(element); MonitorRenderedCard(element);
+            var element = CachedCard(node);
+            SetCardDetailVisibility(element, ShowCardDetails); NodeCanvas.Children.Add(element);
         }
     }
     private void ClearDropPreview()

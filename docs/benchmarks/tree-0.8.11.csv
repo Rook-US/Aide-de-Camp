@@ -1,0 +1,9 @@
+transition,milliseconds,allocated_bytes,reused_cards
+expand,2433.8,257064336,0
+collapse,1242.6,141059864,0
+expand,1828.8,280888080,0
+collapse,1002.5,142693096,0
+expand,2776.7,280190992,0
+collapse,1385.6,142363024,0
+expand,2772.2,278771272,0
+collapse,1328.8,140628224,0

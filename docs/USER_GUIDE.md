@@ -8,6 +8,8 @@ Choose Union or Confederacy, then Armies, Garrisons, Navy, Officers, Weapons, or
 
 Compact cards show the unit/command name, ranked commander, immediate parent, assigned manpower, casualties, and strength/transfer/contract alerts. HQ alerts include subordinate formations and missing commanders. Guns remain separate from manpower; assigned strength includes units in transfer. Zoom to 95% for supplemental metrics, weapons, contracts, and unit experience, or set your own detail threshold in UI settings. Details collapse below that threshold, releasing their layout space.
 
+Tree cards for both factions are prepared while a save loads. Zoom and individual edits reuse the cards; only changed content and affected summaries update. Undo/redo keeps earlier measurements available. A new save or closing the app clears this in-memory cache. Changing font/card settings rebuilds geometry to match the new settings.
+
 Start around 80% zoom for readable compact cards. Text scale defaults to 1.15. Card and text changes reflow the layout while retaining a nearby card's screen position. Very distant overview zoom still reduces text size.
 
 Spacing controls use world pixels at 100% zoom. A base horizontal gutter adds to the HQ or combat column gap; mixed boundaries average the two column gaps. Parent-row gaps add the base row gutter. A shared row clears its tallest card and largest applicable tier gap, so another branch can determine the minimum row separation. Root gaps and combat stack gaps are direct edge gaps. Zero allows touching footprints; a small positive gutter keeps connectors easier to follow. Subtree clearance can require more space than a local gap.
