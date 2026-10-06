@@ -80,6 +80,7 @@ public partial class MainWindow
     private void ClearSelection_Click(object sender,RoutedEventArgs e) {
         if(ManagementWorkspace.Visibility==Visibility.Visible) {
             ManagementGrid.SelectedItems.Clear();
+            ManagementGrid.SelectedCells.Clear();
             _managementSelections[ManagementSelectionKey]=new();
             SelectBoardCard(null);
             UpdateManagementSelectionUi();
@@ -89,8 +90,7 @@ public partial class MainWindow
         if(ManagementWorkspace.Visibility==Visibility.Visible) {
             if(_workspace=="Economy" && (_nationView is "Projects" or "Policies"))EditSelectedBoardCard();
             else EditManagement_Click(sender,e);
-        } else if(_selectedUnits.Count==1)OpenFloatingDetail(_selectedUnits.Single());
-        else if(_selectedUnits.Count>1)BatchEdit_Click(sender,e);
+        } else if(_selectedUnits.Count>0)BatchEdit_Click(sender,e);
         else if(_selectedNode is GroupNode {IsLandCommand:true}) {
             var editor=SharedDetailPanel.Children.OfType<TextBox>().FirstOrDefault();
             editor?.BringIntoView();editor?.Focus();editor?.SelectAll();
@@ -108,7 +108,7 @@ public partial class MainWindow
     private void ManagementGrid_MouseDoubleClick(object sender,System.Windows.Input.MouseButtonEventArgs e) {
         if(e.ChangedButton!=System.Windows.Input.MouseButton.Left || _workspace is not ("Officers" or "Weapons" or "Economy" or "Navy") || _data.IsReadOnlySave)return;
         if(e.OriginalSource is not DependencyObject source || ItemsControl.ContainerFromElement(ManagementGrid,source) is not DataGridRow row)return;
-        ManagementGrid.SelectedItems.Clear();ManagementGrid.SelectedItem=row.Item;
+        ManagementGrid.SelectedItems.Clear();ManagementGrid.UnselectAllCells();ManagementGrid.SelectedItem=row.Item;
         e.Handled=true;EditManagement_Click(sender,e);
     }
     private void EditTreasury_Click(object sender,RoutedEventArgs e) {
@@ -189,7 +189,7 @@ public partial class MainWindow
     private void EditManagement_Click(object sender,RoutedEventArgs e) {
         if(_data.Management is not { } doc || _data.IsReadOnlySave)return;
         try {
-            var selected=ManagementGrid.SelectedItems.Cast<object>().ToList();if(selected.Count==0)throw new InvalidOperationException("Select a record first.");
+            var selected=SelectedManagementRows();if(selected.Count==0)throw new InvalidOperationException("Select a record first.");
             int Id(object row)=>(int)row.GetType().GetProperty("Id")!.GetValue(row)!;
             Dictionary<ManagementDocument.Field,string>? changes;
             if(_workspace=="Economy" && _nationView=="States") {var dialog=new StatePopulationWindow(_data,selected.Select(Id).ToArray(),_nation){Owner=this};if(dialog.ShowDialog()!=true)return;changes=dialog.Changes;}

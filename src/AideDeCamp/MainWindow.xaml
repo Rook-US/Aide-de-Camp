@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:AideDeCamp.Models"
         xmlns:local="clr-namespace:AideDeCamp"
-        Title="Aide-de-Camp 0.8.13" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
+        Title="Aide-de-Camp 0.8.14" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
         Background="#11161C" Foreground="#E8EDF2" KeyDown="Window_KeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -148,6 +148,7 @@
           </DockPanel>
         </StackPanel>
 
+        <Border DockPanel.Dock="Top" Background="#1C2933" Padding="12,5"><TextBlock x:Name="SaveInfoText" Text="No save loaded" TextWrapping="Wrap" Foreground="#C5D5DE"/></Border>
         <TextBlock x:Name="WorkspaceNotice" DockPanel.Dock="Top" Padding="12,6" Foreground="#E9C46A" Background="#302A20" FontWeight="Bold" Visibility="Collapsed"/>
         <StatusBar DockPanel.Dock="Bottom" Background="#172029" Foreground="#9BA8B4"><StatusBarItem><TextBlock x:Name="StatusText"/></StatusBarItem></StatusBar>
 
@@ -192,8 +193,8 @@
                         </StackPanel>
                     </Border>
                     <DataGrid Grid.Row="2" x:Name="RosterGrid" ContextMenuOpening="RosterContextOpening" Margin="8" Background="#121920" Foreground="#DCE4EB" RowBackground="#172029" AlternatingRowBackground="#141C24" BorderBrush="#34414D"
-                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="FullRow" GridLinesVisibility="All" HorizontalGridLinesBrush="#28343F" VerticalGridLinesBrush="#28343F"
-                              HeadersVisibility="Column" CanUserSortColumns="True" Sorting="RosterGrid_Sorting" SelectionChanged="RosterGrid_SelectionChanged" MouseDoubleClick="RosterGrid_MouseDoubleClick">
+                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="CellOrRowHeader" SelectedCellsChanged="RosterCellsChanged" PreviewKeyDown="RosterClipboardKeyDown" GridLinesVisibility="All" HorizontalGridLinesBrush="#28343F" VerticalGridLinesBrush="#28343F"
+                              HeadersVisibility="All" CanUserSortColumns="True" Sorting="RosterGrid_Sorting" SelectionChanged="RosterGrid_SelectionChanged" MouseDoubleClick="RosterGrid_MouseDoubleClick">
                         <DataGrid.ContextMenu><ContextMenu><MenuItem Header="View in OOB" Click="RosterViewInOob_Click"/><MenuItem Header="Open Detail Card" Click="RosterOpenDetail_Click"/><MenuItem Header="Show Changes for Unit" Click="RosterShowChanges_Click"/><Separator/><MenuItem Header="Batch Edit Selected" Click="BatchEdit_Click"/></ContextMenu></DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="UNIT / COMMAND" SortMemberPath="Name" Width="240">
@@ -258,7 +259,7 @@
               <StackPanel x:Name="TreasuryPanel" Orientation="Horizontal" Margin="0,0,0,8" Visibility="Collapsed"><TextBlock x:Name="TreasuryBalanceText" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="EditTreasuryButton" Margin="12,3,3,3" Content="Edit treasury" Click="EditTreasury_Click"/></StackPanel>
               <StackPanel x:Name="ManagementBatchActions" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8"><TextBlock Text="Ctrl-click or Shift-click rows to select several" VerticalAlignment="Center"/></StackPanel>
             </StackPanel>
-            <DataGrid x:Name="ManagementGrid" Grid.Row="2" IsReadOnly="True" AutoGenerateColumns="True" AutoGeneratingColumn="ManagementGrid_AutoGeneratingColumn" MouseDoubleClick="ManagementGrid_MouseDoubleClick" SelectionChanged="ManagementSelection_Changed" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="FullRow" RowBackground="#172029" AlternatingRowBackground="#141C24" Foreground="#E8EDF2" Background="#11161C"/>
+            <DataGrid x:Name="ManagementGrid" Grid.Row="2" IsReadOnly="True" AutoGenerateColumns="True" AutoGeneratingColumn="ManagementGrid_AutoGeneratingColumn" MouseDoubleClick="ManagementGrid_MouseDoubleClick" SelectionChanged="ManagementSelection_Changed" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="CellOrRowHeader" SelectedCellsChanged="ManagementCellsChanged" PreviewKeyDown="ManagementClipboardKeyDown" RowBackground="#172029" AlternatingRowBackground="#141C24" Foreground="#E8EDF2" Background="#11161C"/>
             <ScrollViewer x:Name="NationBoardViewport" Grid.Row="2" Visibility="Collapsed" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" SizeChanged="NationBoard_SizeChanged">
               <Grid x:Name="NationBoard"/>
             </ScrollViewer>

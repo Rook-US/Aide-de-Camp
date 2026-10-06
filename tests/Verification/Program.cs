@@ -14,6 +14,22 @@ try
     var editWeapons = new[] { new WeaponOption(1,"Musket",0), new WeaponOption(2,"Cannon",2) };
     var editStates = new[] { new StateOption(1,"Ohio","OH") };
     var typed = new TypedUnitEdit(editUnit); var editValidator = new EditValidationService();
+    var selectionBattery=new CombatUnitNode{Name="Battery",UnitType=2,UnitTier=13,TotalMenRaw=100,WeaponId=2,WeaponName="Cannon",ConfiguredMaxStrength=300,ArtilleryCalculation=new ArtilleryRules(300,30,1)};
+    var infantryBefore=UnitEditSnapshot.Capture(editUnit);var selectionBatteryBefore=UnitEditSnapshot.Capture(selectionBattery);
+    var selection=SelectionEditPlan.Build(new[]{editUnit,selectionBattery},u=>u.UnitType==2?new Dictionary<string,string>{{"FieldStrength","180"},{"Experience","25"}}:new Dictionary<string,string>{{"FieldStrength","800"},{"Experience","30"}},editWeapons,editStates,editValidator);
+    Check(selection.Errors.Count==0&&selection.Changes.Count==2&&selection.Tooltip.Contains("estimated guns"),"Mixed selection previews separate strength and gun results");
+    Check(UnitEditSnapshot.Capture(editUnit)==infantryBefore&&UnitEditSnapshot.Capture(selectionBattery)==selectionBatteryBefore,"Selection preview does not mutate units");
+    var selectionSession=new EditSession();selectionSession.Execute("Mixed edit",new[]{editUnit,selectionBattery},selection.Apply);
+    Check(editUnit.FieldStrength==800&&selectionBattery.FieldStrength==180&&selectionBattery.ExperienceRaw==25,"Mixed selection applies each group's values to its own units");
+    selectionSession.Undo(out _);Check(UnitEditSnapshot.Capture(editUnit)==infantryBefore&&UnitEditSnapshot.Capture(selectionBattery)==selectionBatteryBefore,"Mixed selection restores both types in one undo");
+    var incompatible=SelectionEditPlan.Build(new[]{editUnit},u=>new Dictionary<string,string>{{"Weapon","Cannon"}},editWeapons,editStates,editValidator);
+    Check(incompatible.Errors.Count>0,"Selection editor blocks cross-type weapon assignment");
+    var invalidSelection=SelectionEditPlan.Build(new[]{editUnit,selectionBattery},u=>new Dictionary<string,string>{{"Experience",u.UnitType==2?"bad":"25"}},editWeapons,editStates,editValidator);
+    bool refused=false;try{invalidSelection.Apply();}catch(InvalidOperationException){refused=true;}
+    Check(refused&&UnitEditSnapshot.Capture(editUnit)==infantryBefore,"One invalid destination blocks the entire selected edit");
+    var metadataFolder=Path.Combine(temp,"metadata");Directory.CreateDirectory(metadataFolder);var metadataLines=Enumerable.Repeat("",26).ToArray();metadataLines[0]="0";metadataLines[1]="Union";metadataLines[2]="8";metadataLines[3]="7";metadataLines[4]="1861";metadataLines[12]="001/G";metadataLines[24]="Before the battle";metadataLines[25]="Summer 1861";File.WriteAllLines(Path.Combine(metadataFolder,"scenario.dat"),metadataLines);
+    var saveMetadataCheck=SaveMetadata.Read(metadataFolder);Check(saveMetadataCheck.Campaign=="G — Summer 1861"&&saveMetadataCheck.SaveName=="Before the battle"&&saveMetadataCheck.Date=="Jul 8, 1861"&&saveMetadataCheck.Faction=="Union","Save metadata uses campaign title, save label, campaign date and player faction");
+    var descriptor=Path.Combine(metadataFolder,"ScenarioDescr.txt");File.WriteAllLines(descriptor,new[]{"//Name of Scenario for buttons ->","Summer 1861 Alternative"});Check(SaveMetadata.CampaignName(descriptor)=="Summer 1861 Alternative","Campaign label skips descriptor comment placeholders");
     typed.Fields["Experience"].Text="15B";
     typed.Validate(editWeapons,editStates,editValidator);
     Check(typed.Fields["Experience"].Result.Severity==ValidationSeverity.Error && editUnit.ExperienceRaw==0, "Malformed draft does not mutate numeric model");

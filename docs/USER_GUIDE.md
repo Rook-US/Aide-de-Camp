@@ -18,7 +18,17 @@ Saved preferences are retained. To adopt the new defaults from an older installa
 
 ## Batch editing
 
-Use Ctrl/Shift to select multiple entries, then Batch Edit. Check each field you want to change. Only checked fields are applied; mixed values appear blank. Retained selections let you perform another batch operation without selecting the same entries again. Available fields depend on the selected entry type.
+Use Ctrl/Shift to select entries or cells, then **Edit Selected** (or **Batch Edit**). Combat units are grouped by type, with the full single-unit field set in each group. Weapons are filtered for that type. Strength previews show the configured maximum and estimated artillery guns. Changing a value selects its field automatically; restoring the original clears it. Blank mixed fields leave the units unchanged. Names can be shared intentionally, but a warning reminds you that unique names are easier to identify.
+
+One commit stages every group together. The footer shows how many units will change out of the selection; hover it for the old and new values. Ships, officers and weapons also show applicable fields, identifying subsets when a field is available for only some records. **Reselect batch** restores the last batch selection; it does not undo edits.
+
+## Roster clipboard
+
+Click a cell and press **Ctrl+C** to copy its value. Select destination cells with Ctrl/Shift and press **Ctrl+V** to fill them. One copied value fills all selected cells; a copied table must match the selected rows and columns. Paste uses the destination columns, so copying from Experience does not permanently restrict pasting to Experience. Every destination is validated, and one invalid cell blocks the whole paste. Read-only fields cannot be pasted into. While typing inside a cell editor, Ctrl+C/V retain normal text editing behavior. A whole paste is one Ctrl+Z undo step.
+
+## Save information
+
+The information strip always shows the loaded campaign, save name, in-game date and player faction. The player faction remains the save's faction when browsing the other side. The save browser lists campaign letters with their in-game names, and each save's label, campaign date and real-world modification time.
 
 ## Ships
 
@@ -38,6 +48,6 @@ Policies show a progress percentage and bar. Completion requests use near-comple
 
 Preferences are stored under `%LOCALAPPDATA%\Aide-de-Camp`. Existing preferences from the former `GTCW.OOBEditor` location are read as a fallback; new settings use the new location. Save backups use `Aide-de-Camp_Backups`; older backup folders are excluded from recursive backup copies.
 
-Application errors are written to the application's `Logs` folder when that location is writable. When reporting an issue, include the app version, the action that failed, and the relevant error text. Review logs before sharing them because they can contain local paths. Do not post game files or personal campaign saves in public issues.
+Application errors are written to `%LOCALAPPDATA%\Aide-de-Camp\Logs`. When reporting an issue, include the app version, the action that failed, and the relevant error text. Review logs before sharing them because they can contain local paths. Do not post game files or personal campaign saves in public issues.
 
 The preview package is unsigned. See [known limits](https://github.com/Rook-US/Aide-de-Camp/blob/master/docs/KNOWN_LIMITS.md) for current validation boundaries.

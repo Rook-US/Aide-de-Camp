@@ -240,7 +240,7 @@ internal static partial class Program
                     var check=Descendants(edit).OfType<CheckBox>().Single(c=>c.Content is TextBlock t && t.Text.StartsWith("Experience"));
                     check.IsChecked=true;
                     ((Grid)check.Parent).Children.OfType<TextBox>().Single().Text="37.5";
-                    Descendants(edit).OfType<Button>().Single(b=>b.Content?.ToString()=="Stage changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Descendants(edit).OfType<Button>().Single(b=>b.Content?.ToString()=="Commit changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 }),DispatcherPriority.ApplicationIdle);
                 Check(edit.ShowDialog()==true && edit.Changes!.Single().Value=="37.5" && !realData.Management.HasChanges,"Officer dialog stages checked fields without mutating the document before Apply");
                 var stateId=realData.Management.Records.First(r=>r.Domain=="Economy").Id;
@@ -256,6 +256,7 @@ internal static partial class Program
                 typeof(MainWindow).GetField("_allowClose",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(managementWindow,true);
                 managementWindow.Close();
             }
+            CheckPolish(window,data);
             Console.WriteLine($"ALL {checks} WINDOWS UI CHECKS PASSED");
             typeof(MainWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, true);
             window.Close(); app.Shutdown(); return 0;

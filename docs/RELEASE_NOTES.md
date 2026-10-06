@@ -1,3 +1,11 @@
+# Aide-de-Camp 0.8.14 preview
+
+The portable release presents a single executable and README in its root, with documentation and license notices in folders. The executable includes the .NET runtime.
+
+Edit Selected exposes the full combat-unit field set in separate type groups, filters weapon choices, and previews strength maxima and artillery guns. A single commit covers every group, with selected/changed counts and a detailed tooltip. Management editors include fields available to subsets of the selection. Roster cells support validated scalar and rectangular copy/paste with one undo step.
+
+A persistent strip identifies the campaign, save, in-game date and player faction. The save browser uses actual campaign/save labels and displays campaign dates and modification times.
+
 # Aide-de-Camp 0.8.13 preview
 
 Search and Edit Selected now occupy the same left-hand toolbar positions across Army, Garrison, Navy, Officer, Weapon, and Nation views. Batch Edit remains beside them where supported. Reselect batch restores the previous batch selection and now explains that it does not undo changes. Batch dialog fields select and highlight themselves when changed, then clear when restored. Project and policy cards show their in-game descriptions directly.

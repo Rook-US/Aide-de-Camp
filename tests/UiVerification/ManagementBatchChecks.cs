@@ -37,7 +37,7 @@ internal static partial class Program
                 }
                 if(workspace=="Navy")Check(Descendants(dialog).OfType<TextBlock>().Any(t=>t.Text.Contains("99% condition, not construction completion")&&t.Text.Contains("100 finishes construction")),"Ship editor explains hull condition, construction completion and repair work separately");
                 Shot(dialog,"UI-Batch-"+workspace+".png");
-                Descendants(dialog).OfType<Button>().Single(b=>b.Content?.ToString()=="Stage changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Descendants(dialog).OfType<Button>().Single(b=>b.Content?.ToString()=="Commit changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }),DispatcherPriority.ApplicationIdle);
             ((Button)window.FindName("BatchEditButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Flush(window);
             var records=data.Management!.Records.Where(r=>r.Domain==workspace&&ids.Contains(r.Id)&&(workspace!="Weapons"||r.Side==1)).ToList();
@@ -49,7 +49,27 @@ internal static partial class Program
             Check(data.HasUnsavedChanges==initialDirty&&grid.SelectedItems.Count==2,workspace+" batch undoes in one action while retaining selection");
             grid.SelectedItems.Clear();typeof(MainWindow).GetMethod("RecallManagementBatch_Click",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(window,new object[]{window,new RoutedEventArgs()});Flush(window);
             Check(grid.SelectedItems.Count==2,workspace+" can recall its previous batch after clearing selection");
+            var pasteBefore=data.Management.Capture();
+            string property=workspace=="Navy"?"ConditionPercent":key;
+            var pasteColumn=grid.Columns.OfType<DataGridBoundColumn>().Single(c=>c.Binding is System.Windows.Data.Binding b&&b.Path.Path==property);
+            var pasteRows=grid.Items.Cast<object>().Take(2).ToArray();grid.UnselectAll();grid.UnselectAllCells();
+            foreach(var row in pasteRows)grid.SelectedCells.Add(new DataGridCellInfo(row,pasteColumn));
+            ClipboardAccess.SetText("43");typeof(MainWindow).GetMethod("ManagementClipboard",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(window,new object[]{true});Flush(window);
+            Check(records.All(r=>data.Management.Value(r.Fields.Single(f=>f.Key==key))=="43"),workspace+" clipboard fills selected cells through validated fields");
+            typeof(MainWindow).GetMethod("UndoWorkingEdit",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(window,null);Flush(window);
+            var pasteRestored=data.Management.Capture();Check(pasteBefore.All(p=>pasteRestored[p.Key]==p.Value),workspace+" clipboard paste restores exactly in one undo");
         }
+        var ships=data.Management!.Records.Where(r=>r.Domain=="Navy").ToArray();
+        var repairing=ships.First(r=>data.Management.Numeric(r.Fields.Single(f=>f.Key=="RepairRemaining").File,r.Fields.Single(f=>f.Key=="RepairRemaining").Line)>0);
+        var ready=ships.First(r=>data.Management.Numeric(r.Fields.Single(f=>f.Key=="RepairRemaining").File,r.Fields.Single(f=>f.Key=="RepairRemaining").Line)==0);
+        var subsetDialog=new ManagementEditWindow(data.Management,new[]{repairing,ready},"mixed ship work"){Owner=window};
+        subsetDialog.Dispatcher.BeginInvoke(new Action(()=>{
+            Flush(subsetDialog);var check=Descendants(subsetDialog).OfType<CheckBox>().Single(c=>c.Content is TextBlock text&&text.Text.StartsWith("Repair work remaining"));
+            Check(((TextBlock)check.Content).Text.Contains("1 of 2 selected"),"Conditional ship field identifies exactly which subset it edits");
+            ((Grid)check.Parent).Children.OfType<TextBox>().Single().Text="0";
+            Descendants(subsetDialog).OfType<Button>().Single(b=>b.Content?.ToString()=="Commit changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        }),DispatcherPriority.ApplicationIdle);
+        Check(subsetDialog.ShowDialog()==true&&subsetDialog.Changes!.Keys.All(repairing.Fields.Contains),"A conditional ship edit targets only the applicable ship in a mixed selection");
         Open("Economy");
         var cash=(TextBlock)window.FindName("TreasuryBalanceText");var edit=(Button)window.FindName("EditTreasuryButton");
         var cashRect=cash.TransformToAncestor(window).TransformBounds(new Rect(cash.RenderSize));var editRect=edit.TransformToAncestor(window).TransformBounds(new Rect(edit.RenderSize));

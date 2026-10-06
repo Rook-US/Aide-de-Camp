@@ -5,7 +5,7 @@ namespace AideDeCamp.Services;
 public static class ErrorLog
 {
     private static readonly object Gate=new();
-    public static string DirectoryPath=>Path.Combine(AppContext.BaseDirectory,"Logs");
+    public static string DirectoryPath=>Path.Combine(AppPaths.Root,"Logs");
     public static string? Write(string operation,Exception exception,string? directory=null)
     {
         try {
