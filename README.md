@@ -13,7 +13,7 @@ Requires Windows 10/11 x64 and your own game installation. Version **0.8.10 is a
 - Army and garrison rosters, formation cards, naming rules, and retained batch selections.
 - Ships in deployed fleets or port, including construction, repair, and condition editing.
 - Officers with experience, fame, attributes, traits, branch, and promotion dates.
-- Weapon stockpiles, standardization, and existing order editing.
+- Weapon stockpiles editable per nation, but standardization and order editing need work.
 - Nation views for eligible recruitment states, treasury, projects with stage boxes, subsidy funding, and policy progress.
 - Checked-field batch edits for units, ships, officers, and weapons; review, backups, and undo support.
 - Adjustable UI settings and application error logs.
