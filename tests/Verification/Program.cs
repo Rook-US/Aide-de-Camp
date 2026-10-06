@@ -398,6 +398,13 @@ try
     Check(new ArtilleryRules(300,.2f,.5f).Count(60,0)==6,"Artillery respects different campaign configuration ratios");
     var targetPop=RecruitmentProjection.Target(10000,100,110,10,.9,true);
     Check(targetPop>12000 && RecruitmentProjection.Available(10000,targetPop,100,110,.9)>=10,"Volunteer target clears the existing hidden deficit before adding available men");
+    var deficitState=new ManagementSnapshot.State(1,0,"Fixture",10000,100,0,10,110,100,true);
+    var partialPool=RecruitmentProjection.ForPopulation(deficitState,10500,.9);
+    Check(partialPool is {Available:0,Deficit:6},"Population increase reduces estimated deficit before volunteers become available");
+    Check(RecruitmentProjection.ForPopulation(deficitState,targetPop,.9) is {Available:>=10,Deficit:0},"Volunteer target produces an available pool with no projected deficit");
+    Check(RecruitmentProjection.ForPopulation(deficitState,10000,null) is {Available:0,Deficit:10},"Restoring population restores saved pool even without recruitment settings");
+    Check(RecruitmentProjection.ForPopulation(deficitState,10500,null) is null && RecruitmentProjection.ForPopulation(deficitState with {Capacity=0},10500,.9) is null,"Unavailable projection inputs do not disguise saved counters as estimates");
+    Check(RecruitmentProjection.ForPopulation(deficitState,9000,.9) is {Available:0,Deficit:20},"Population decreases increase the projected deficit");
     foreach(var test in new[]{(Capacity:0L,Eligible:true),(Capacity:100L,Eligible:false)}) {
         bool targetRejected=false;try{RecruitmentProjection.Target(10000,test.Capacity,110,10,.9,test.Eligible);}catch(InvalidOperationException){targetRejected=true;}
         Check(targetRejected,"Missing capacity or recruitment eligibility blocks volunteer targeting");

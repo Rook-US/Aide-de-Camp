@@ -38,7 +38,7 @@ Construction and repair progress changes also adjust condition by the work delta
 
 ## Nation
 
-States lists eligible Union/Confederate recruitment regions, excluding foreign regions. Recruitment adjustments use mapped population data and a projection; the campaign recalculates actual availability under its recruitment rules.
+States lists eligible Union/Confederate recruitment regions, excluding foreign regions. Recruitment adjustments use mapped population data and a projection; the campaign recalculates actual availability under its recruitment rules. After committing an edit, Available Volunteers and Volunteer Deficit show the estimated result, with Pool Basis identifying estimates. An increase first reduces any deficit before adding available troops. Saved counters remain alongside for comparison. Undo and redo update these estimates. If capacity or campaign settings are unavailable, the result is marked Not estimable. Estimates use the population originally loaded in this editing session; reopening an edited save before the game recalculates shows its still-saved pool counters.
 
 Projects & Funding groups projects under their subsidy category and shows the current funding balance rounded to whole dollars. Completed stage boxes are green. Double-click a stage to complete that stage and earlier stages; double-click a project row to complete its next stage. Direct save edits do not deduct a normal in-game purchase price.
 

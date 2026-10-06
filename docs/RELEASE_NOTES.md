@@ -1,3 +1,7 @@
+# Aide-de-Camp 0.8.15 alpha
+
+Fixed the States roster after population and volunteer-target edits. Available volunteers and remaining deficits now use the same estimate as Edit Selected, including partial deficit reductions. Saved counters remain visible for comparison. Undo and redo restore the estimates; unavailable inputs are explicitly marked. Only population is written; the game recalculates the final recruitment pool.
+
 # Aide-de-Camp 0.8.14 alpha
 
 The portable release presents a single executable and README in its root, with documentation and license notices in folders. The executable includes the .NET runtime.

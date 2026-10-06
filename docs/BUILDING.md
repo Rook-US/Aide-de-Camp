@@ -19,7 +19,7 @@ The UI suite opens test windows and requires a Windows desktop session. `AIDE_DE
 
 ```powershell
 ./scripts/Package.ps1
-./scripts/Test-Package.ps1 -Archive ./artifacts/Aide-de-Camp-0.8.14-win-x64.zip
+./scripts/Test-Package.ps1 -Archive ./artifacts/Aide-de-Camp-0.8.15-win-x64.zip
 ```
 
 The package bundles .NET and Windows Desktop into one self-contained executable, without trimming. Native and managed runtime content is extracted to the .NET bundle cache when needed. Only the EXE and README are files in the release root; documentation and notices live in subfolders. Source/debug files are excluded. The script pins runtime 8.0.30; use `-RuntimeVersion` to deliberately update it and rerun verification.

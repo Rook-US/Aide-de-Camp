@@ -100,8 +100,8 @@ public partial class MainWindow
     {
         e.Column.Header=System.Text.RegularExpressions.Regex.Replace(e.PropertyName,"(?<=[a-z])(?=[A-Z])"," ");
         if(e.Column is DataGridTextColumn text && text.Binding is System.Windows.Data.Binding binding &&
-            (e.PropertyType==typeof(double) || e.PropertyType==typeof(double?) || e.PropertyType==typeof(long) || e.PropertyType==typeof(int)))
-            binding.StringFormat=e.PropertyName.EndsWith("Id") || e.PropertyName=="Id"?"0":e.PropertyType==typeof(int) || e.PropertyType==typeof(long)?"N0":"N2";
+            (e.PropertyType==typeof(double) || e.PropertyType==typeof(double?) || e.PropertyType==typeof(long) || e.PropertyType==typeof(long?) || e.PropertyType==typeof(int)))
+            binding.StringFormat=e.PropertyName.EndsWith("Id") || e.PropertyName=="Id"?"0":e.PropertyType==typeof(int) || e.PropertyType==typeof(long) || e.PropertyType==typeof(long?)?"N0":"N2";
     }
     private void DeployedFleets_Click(object sender,RoutedEventArgs e) {_portView=false;RefreshManagement();}
     private void ShipsInPort_Click(object sender,RoutedEventArgs e) {_portView=true;RefreshManagement();}
@@ -147,10 +147,19 @@ public partial class MainWindow
                 TreasuryBalanceText.Text=$"{faction} national treasury balance: $ {doc!.Numeric(treasury.Fields[0].File,treasury.Fields[0].Line):N0}";
                 EditTreasuryButton.IsEnabled=!_data.IsReadOnlySave;
             }
-            ManagementGrid.ItemsSource=_management.States.Where(s=>s.Side==_nation && s.IsVolunteerEditorState && Match(s.Name)).Select(s=>new {
-                s.Id,s.Name,s.Population,SupportPercent=s.Support,SavedAvailableVolunteers=s.Available,HiddenDeficit=s.Deficit,AlreadyRecruited=s.Recruited,SavedCapacity=s.Capacity,s.Recruitable
+            var originalStates=ManagementSnapshot.Read(_data.SaveDirectory,_data.StateOptions.ToDictionary(s=>s.Id,s=>s.Name),_data.Groups.ToDictionary(g=>g.Key,g=>g.Value.Nation),doc is null?null:doc.OriginalLines).States.ToDictionary(s=>(s.Id,s.Side));
+            var reduction=CampaignRules.Setting(CampaignRules.Resolve(_data.SaveDirectory,_data.ConfigDirectory,"campaignprefs.txt"),"Reduction of volunteers pools for higher recruiting numbers, exp");
+            ManagementGrid.ItemsSource=_management.States.Where(s=>s.Side==_nation && s.IsVolunteerEditorState && Match(s.Name)).Select(s=>{
+                var original=originalStates.GetValueOrDefault((s.Id,s.Side));
+                var pool=original is null?null:RecruitmentProjection.ForPopulation(original,s.Population,1-reduction);
+                bool edited=original is not null && original.Population!=s.Population;
+                return new {
+                    s.Id,s.Name,s.Population,AvailableVolunteers=pool?.Available,VolunteerDeficit=pool?.Deficit,
+                    PoolBasis=pool is null?"Not estimable":edited?"Estimated from population":"Saved",
+                    SupportPercent=s.Support,SavedAvailableVolunteers=s.Available,SavedDeficit=s.Deficit,AlreadyRecruited=s.Recruited,SavedCapacity=s.Capacity,s.Recruitable
+                };
             }).ToList();
-            ManagementSummary.Text=$"{faction} active U.S. recruitment states and territories • Double-click a row, or select several and choose Adjust selected states. Population is shared; saved volunteer balances update when the game recalculates.";
+            ManagementSummary.Text=$"{faction} active U.S. recruitment states and territories • Select rows and choose Edit Selected. Available volunteers and deficits are estimated after population edits; saved counters remain alongside for comparison. Population is shared. The game recalculates the final pools after loading; recruitment still depends on support and policies.";
             foreach(var button in NationViews.Children.OfType<Button>())button.FontWeight=button.Tag?.ToString()==_nationView?FontWeights.Bold:FontWeights.Normal;
             if(_nationView is "Projects" or "Policies") {
                 var progress=_data.Progression;

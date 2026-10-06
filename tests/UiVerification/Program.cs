@@ -27,6 +27,13 @@ internal static partial class Program
         try {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Aide-de-Camp;component/Themes/Dark.xaml", UriKind.Relative) });
+            if(args.Length==3 && args[0]=="--population-checks") {
+                var populationWindow=new MainWindow(true);
+                var populationData=(GrandTacticianDataService)typeof(MainWindow).GetField("_data",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(populationWindow)!;
+                populationData.LoadAsync(args[1],args[2]).GetAwaiter().GetResult();populationWindow.Show();
+                CheckPopulationRoster(populationWindow,populationData,app);
+                Console.WriteLine($"ALL {checks} POPULATION UI CHECKS PASSED");app.Shutdown();return 0;
+            }
             if (args.Length == 2 && args[0] == "--tree-evidence") { TreeEvidence(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--tree-checks") { TreeEvidence(args[1], true); Console.WriteLine($"ALL {checks} TREE CHECKS PASSED"); return 0; }
             if (args.Length == 2 && args[0] == "--tree-performance") { TreePerformance(args[1]); return 0; }
@@ -233,6 +240,7 @@ internal static partial class Program
                 var officer=realData.Management!.Records.First(r=>r.Domain=="Officers" && r.Side==1);
                 CheckNationBoards(managementWindow,realData,app);
                 CheckManagementBatches(managementWindow,realData,app);
+                CheckPopulationRoster(managementWindow,realData,app);
                 typeof(MainWindow).GetMethod("NationView_Click",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(managementWindow,new object[]{new Button{Tag="States"},new RoutedEventArgs()});Flush(managementWindow);
                 var edit=new ManagementEditWindow(realData.Management,officer,officer.Name){Owner=managementWindow};
                 edit.Dispatcher.BeginInvoke(new Action(()=>{

@@ -1,5 +1,8 @@
 # Validation
 
+For 0.8.15, 165 service checks and 676 Windows UI checks passed. Population regressions cover partial deficit reduction, target fulfillment, invalid estimate inputs, and decreases; real-save UI checks commit two selected states, compare roster values with the editor, switch factions, and undo/redo. Extracted-package startup passed using bundled .NET 8.0.30. The packaging restore could not reach NuGet vulnerability data; compilation and package checks succeeded using cached dependencies. In-game recalculation remains unverified.
+
+
 For 0.8.14, 160 service checks and 667 Windows UI checks passed. Coverage includes mixed infantry/artillery field and weapon targeting, strength/gun previews, one-step undo, invalid-paste atomicity, clipboard edits in unit/officer/weapon/ship rosters, conditional ship-field subsets, and save metadata labels. The extracted single-executable package started using bundled .NET 8.0.30 with no shared runtime configured; its root-file and source-file exclusion checks passed. In-game campaign acceptance testing remains outstanding.
 
 For 0.8.12, see [Tree cache lifecycle and transition measurements](TREE_CACHE_VALIDATION.md).

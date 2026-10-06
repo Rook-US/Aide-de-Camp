@@ -4,12 +4,24 @@ namespace AideDeCamp.Services;
 // This never changes volunteers/recruited counters or promises current live policy parity.
 public static class RecruitmentProjection
 {
+    public sealed record Pool(long Available,long Deficit);
+    public static Pool Calculate(double originalPopulation,double newPopulation,long savedCapacity,int recruited,double exponent)
+    {
+        if(!double.IsFinite(originalPopulation) || !double.IsFinite(newPopulation) || !double.IsFinite(exponent) || originalPopulation<=0 || savedCapacity<=0 || newPopulation<0 || exponent<=0 || exponent>1)throw new InvalidOperationException("A positive saved population/capacity and supported recruitment settings are required.");
+        double value=Math.Floor(savedCapacity*Math.Pow(newPopulation/originalPopulation,exponent))-recruited;
+        if(!double.IsFinite(value) || value>int.MaxValue || value<int.MinValue)throw new InvalidOperationException("The projected pool exceeds the game's integer range.");
+        return new(Math.Max(0,(long)value),Math.Max(0,-(long)value));
+    }
+    public static Pool? ForPopulation(ManagementSnapshot.State original,double population,double? exponent)
+    {
+        if(population==original.Population)return new(original.Available,original.Deficit);
+        if(exponent is null)return null;
+        try{return Calculate(original.Population,population,original.Capacity,original.Recruited,exponent.Value);}
+        catch(InvalidOperationException){return null;}
+    }
     public static long Available(double originalPopulation,double newPopulation,long savedCapacity,int recruited,double exponent)
     {
-        if(originalPopulation<=0 || savedCapacity<=0 || newPopulation<0 || exponent<=0 || exponent>1)throw new InvalidOperationException("A positive saved population/capacity and supported recruitment settings are required.");
-        double value=Math.Floor(savedCapacity*Math.Pow(newPopulation/originalPopulation,exponent))-recruited;
-        if(!double.IsFinite(value) || value>int.MaxValue)throw new InvalidOperationException("The projected pool exceeds the game's integer range.");
-        return Math.Max(0,(long)value);
+        return Calculate(originalPopulation,newPopulation,savedCapacity,recruited,exponent).Available;
     }
     public static float Target(double population,long capacity,int recruited,long desired,double exponent,bool eligible)
     {

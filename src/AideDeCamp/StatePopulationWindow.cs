@@ -22,7 +22,7 @@ public sealed class StatePopulationWindow:Window
         top.Children.Add(new TextBlock{Text="Population is shared by both factions. Volunteer projections are estimates calibrated to saved recruitment capacity; stale pools or changed policies can produce different results. The game recalculates after loading. Only population will be changed.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,12)});
         var options=new StackPanel{Orientation=Orientation.Horizontal};top.Children.Add(options);
         var mode=new ComboBox{Width=280,ItemsSource=new[]{"Set population","Increase population by %","Add available volunteers (estimate)","Set available volunteers (estimate)"},SelectedIndex=1};options.Children.Add(mode);
-        var amount=new TextBox{Text="10",Width=150,Margin=new Thickness(10,0,10,0)};options.Children.Add(amount);
+        var amount=new TextBox{Name="PopulationAmount",Text="10",Width=150,Margin=new Thickness(10,0,10,0)};options.Children.Add(amount);
         var preview=new Button{Content="Preview"};options.Children.Add(preview);
         var status=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};top.Children.Add(status);
         var bottom=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};DockPanel.SetDock(bottom,Dock.Bottom);root.Children.Add(bottom);
@@ -39,10 +39,9 @@ public sealed class StatePopulationWindow:Window
                 foreach(int id in ids) {
                     var state=original.States.Single(s=>s.Id==id && s.Side==side);
                     var field=doc.Records.Single(r=>r.Domain=="Economy" && r.Id==id).Fields.Single(f=>f.Key=="Population");
-                    double current=doc.Numeric(field.File,field.Line),next=current;string result="Ready";string Project(int faction,double pop) {
+                    double current=doc.Numeric(field.File,field.Line),next=current;string result="Ready";RecruitmentProjection.Pool? Project(int faction,double pop) {
                         var s=original.States.Single(s=>s.Id==id&&s.Side==faction);
-                        if(s.Capacity<=0 || exp is null)return "Not estimable";
-                        return RecruitmentProjection.Available(s.Population,pop,s.Capacity,s.Recruited,1-exp.Value).ToString("N0");
+                        return RecruitmentProjection.ForPopulation(s,pop,1-exp);
                     }
                     try {
                         if(mode.SelectedIndex==0)next=value;
@@ -56,9 +55,11 @@ public sealed class StatePopulationWindow:Window
                         }
                         var text=doc.Validate(field,next.ToString("R",CultureInfo.InvariantCulture));next=float.Parse(text,CultureInfo.InvariantCulture);plan[field]=text;
                     }catch(Exception ex){skipped++;result=ex.Message;}
-                    rows.Add(new{State=state.Name,CurrentPopulation=current.ToString("N0"),ProposedPopulation=next.ToString("N0"),UnionBefore=Project(0,current),UnionAfter=Project(0,next),ConfederacyBefore=Project(1,current),ConfederacyAfter=Project(1,next),Result=result});
+                    var unionBefore=Project(0,current);var unionAfter=Project(0,next);var confederacyBefore=Project(1,current);var confederacyAfter=Project(1,next);
+                    string Count(long? number)=>number?.ToString("N0")??"Not estimable";
+                    rows.Add(new{State=state.Name,CurrentPopulation=current.ToString("N0"),ProposedPopulation=next.ToString("N0"),UnionBefore=Count(unionBefore?.Available),UnionAfter=Count(unionAfter?.Available),UnionDeficitBefore=Count(unionBefore?.Deficit),UnionDeficitAfter=Count(unionAfter?.Deficit),ConfederacyBefore=Count(confederacyBefore?.Available),ConfederacyAfter=Count(confederacyAfter?.Available),ConfederacyDeficitBefore=Count(confederacyBefore?.Deficit),ConfederacyDeficitAfter=Count(confederacyAfter?.Deficit),Result=result});
                 }
-                grid.ItemsSource=rows;stage.IsEnabled=plan.Count>0;status.Text=$"{plan.Count} states ready; {skipped} skipped. Both sides' projected available volunteers are shown. No recruited counters will change.";
+                grid.ItemsSource=rows;stage.IsEnabled=plan.Count>0;status.Text=$"{plan.Count} states ready; {skipped} skipped. Both sides' estimated available volunteers and remaining deficits are shown. The roster retains these estimates after committing. No recruited counters will change.";
             }catch(Exception ex){Invalidate();status.Text=ex.Message;}
         };
         stage.Click+=(_,_)=>{Changes=plan;DialogResult=true;};
