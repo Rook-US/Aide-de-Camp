@@ -56,6 +56,19 @@ public partial class MainWindow : Window
     private double _worldHeight = 4000;
     private readonly Dictionary<OobNode, double> _nodeMeasuredHeights = new();
     private readonly Dictionary<OobNode, string> _nodeMeasureSignatures = new();
+    private readonly Dictionary<(OobNode Node, bool Details, string Signature), (double Height, double Inset)> _modeFootprints = new();
+
+    private void InvalidateCardMeasurements()
+    {
+        _cardCacheGeneration++;
+        _nodeMeasuredHeights.Clear(); _nodeSurfaceInsets.Clear(); _nodeMeasureSignatures.Clear();
+        _modeFootprints.Clear();
+        _cardWarmupGeneration++;
+        _cardWarmupOperation?.Abort(); _cardWarmupOperation = null;
+        _preparedDetailCards.Clear();
+        _cardVisuals.Clear();
+        NodeCanvas.Children.Clear();
+    }
     private readonly List<ConnectorSegment> _connectorSegments = new();
     private bool _allowClose;
     private bool _saveInProgress;
@@ -67,15 +80,16 @@ public partial class MainWindow : Window
     private const double GroupCardFallbackHeight = 292;
     private double UnitCardWidth => CardFootprintWidth(false);
     private const double UnitCardFallbackHeight = 174;
-    private double ColumnPitch => Math.Max(GroupCardWidth * CardLayoutGeometry.TierScale(true, 16), UnitCardWidth * CardLayoutGeometry.TierScale(false, 13)) + Math.Max(32, Math.Max(Ui("oob.spacing.minX"), Math.Max(Ui("oob.spacing.commands"), Ui("oob.spacing.attached"))));
-    private double RootColumnGap => Ui("oob.spacing.roots") / ColumnPitch;
-    private double ArmyRankGap => Math.Max(Ui("oob.spacing.minY"), Ui("oob.spacing.army"));
-    private double CorpsRankGap => Math.Max(Ui("oob.spacing.minY"), Ui("oob.spacing.corps"));
-    private double DivisionRankGap => Math.Max(Ui("oob.spacing.minY"), Ui("oob.spacing.division"));
-    private double BrigadeRankGap => Math.Max(Ui("oob.spacing.minY"), Ui("oob.spacing.brigade"));
-    private double RegimentRankGap => Math.Max(Ui("oob.spacing.minY"), Ui("oob.spacing.regiment"));
-    private double DefaultRankGap => Math.Max(Ui("oob.spacing.minY"), Ui("oob.spacing.regiment"));
-    private double UnitStackGap => Math.Max(16, Ui("oob.spacing.stack"));
+    // Contours use world pixels and actual card edges, not a largest-card column grid.
+    // Base gutters are additive, so a larger setting never masks another control.
+    private double HorizontalGap(OobNode node) => Ui("oob.spacing.minX") + Ui(node is GroupNode ? "oob.spacing.commands" : "oob.spacing.attached");
+    private double ArmyRankGap => Ui("oob.spacing.minY") + Ui("oob.spacing.army");
+    private double CorpsRankGap => Ui("oob.spacing.minY") + Ui("oob.spacing.corps");
+    private double DivisionRankGap => Ui("oob.spacing.minY") + Ui("oob.spacing.division");
+    private double BrigadeRankGap => Ui("oob.spacing.minY") + Ui("oob.spacing.brigade");
+    private double RegimentRankGap => Ui("oob.spacing.minY") + Ui("oob.spacing.regiment");
+    private double DefaultRankGap => RegimentRankGap;
+    private double UnitStackGap => Ui("oob.spacing.stack");
     private const double WorldPadding = 1800;
     private const double MinWorldWidth = 6000;
     private const double MinWorldHeight = 4000;
@@ -140,9 +154,7 @@ public partial class MainWindow : Window
             _editSession.Clear();
             _typedDrafts.Clear();
             _groupNameDrafts.Clear();
-            _nodeMeasuredHeights.Clear();
-            _nodeSurfaceInsets.Clear();
-            _nodeMeasureSignatures.Clear();
+            InvalidateCardMeasurements();
             await _data.LoadAsync(path, _configDirectory);
             LoadDisplayMetadata();
             _savedDisplayState = DisplayState();
@@ -153,6 +165,8 @@ public partial class MainWindow : Window
             UpdateLimits();
             RebuildSide(initialLoad: true);
             OpenWorkspace(_nation, _workspace);
+            StatusText.Text = "Preparing Tree cards…";
+            await PrepareSaveCardCache();
             SetDirty(false);
             var date = string.IsNullOrWhiteSpace(_data.GameDateText) ? string.Empty : $" • {_data.GameDateText}";
             var pathStates = _data.Units.GroupBy(u => u.PathLinkStatus).ToDictionary(g => g.Key, g => g.Count());
@@ -170,7 +184,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             ErrorLog.Write("Load save",ex);
-            _data.Dispose(); _roots.Clear(); _displayModel = new DisplayOobModel(); ClearDetails();
+            InvalidateCardMeasurements(); _data.Dispose(); _roots.Clear(); _displayModel = new DisplayOobModel(); ClearDetails();
             RefreshOobCanvas(); RefreshRoster(); RefreshAlerts(); SetDirty(false);
             MessageBox.Show(ex.ToString(), "Could not load save", MessageBoxButton.OK, MessageBoxImage.Error);
             StatusText.Text = "Load failed.";
@@ -344,8 +358,6 @@ public partial class MainWindow : Window
 
     private void MeasureNodeFootprints()
     {
-        var groupTemplate = (DataTemplate)FindResource(_category is CommandCategory.Fleet or CommandCategory.Unknown ? "InspectionTemplate" : "GroupNodeTemplate");
-        var unitTemplate = (DataTemplate)FindResource(_category is CommandCategory.Fleet or CommandCategory.Unknown ? "InspectionTemplate" : "CombatUnitTemplate");
         var nodes = EnumerateAllLaidOutNodes().Distinct().ToList();
         var live = new HashSet<OobNode>(nodes);
         foreach (var stale in _nodeMeasuredHeights.Keys.Where(n => !live.Contains(n)).ToList())
@@ -357,16 +369,21 @@ public partial class MainWindow : Window
 
         foreach (var node in nodes)
         {
-            var signature = GetMeasureSignature(node) + "|" + NodeTierScale(node) + "|" + node.Name + "|" + node.IdentityCommander + "|" + node.IdentitySecondary + "|" + string.Join(";", node.CardMetrics.Select(m => m.Label + m.Value));
+            var signature = CardMeasureSignature(node, ShowCardDetails);
             if (_nodeMeasuredHeights.ContainsKey(node) && _nodeMeasureSignatures.GetValueOrDefault(node) == signature) continue;
-            var template = node is GroupNode ? groupTemplate : unitTemplate;
-            if (template.LoadContent() is not FrameworkElement element) continue;
+            if (_modeFootprints.TryGetValue((node, ShowCardDetails, signature), out var cached)) {
+                _nodeMeasuredHeights[node] = cached.Height;
+                _nodeSurfaceInsets[node] = cached.Inset;
+                _nodeMeasureSignatures[node] = signature;
+                continue;
+            }
+            var element = CachedCard(node);
+            var reuse = element.Parent is not null;
             // Detached templates can resolve styles and generated metric rows
             // differently from live cards. Measure under this window's resource tree.
-            CardMeasureHost.Children.Add(element);
+            if (!reuse) CardMeasureHost.Children.Add(element);
             try {
-                element.DataContext = node;
-                ConfigureCard(element, node);
+                SetCardDetailVisibility(element, ShowCardDetails);
                 element.ApplyTemplate();
                 element.Measure(new Size(GetNodeWidth(node), double.PositiveInfinity));
                 var measured = Math.Ceiling(element.DesiredSize.Height);
@@ -377,9 +394,12 @@ public partial class MainWindow : Window
                 _nodeSurfaceInsets[node] = surface is null ? 0 : surface.TransformToAncestor(element).Transform(new Point(0, 0)).Y * NodeCardScale(node);
                 _nodeMeasuredHeights[node] = measured;
                 _nodeMeasureSignatures[node] = signature;
-            } finally { CardMeasureHost.Children.Remove(element); }
+                _modeFootprints[(node, ShowCardDetails, signature)] = (measured, _nodeSurfaceInsets[node]);
+            } finally { if (!reuse) CardMeasureHost.Children.Remove(element); }
         }
     }
+
+    private static string CardMeasureSignature(OobNode node, bool details) => GetMeasureSignature(node) + "|" + details + "|" + NodeTierScale(node) + "|" + node.Name + "|" + node.IdentityCommander + "|" + node.IdentitySecondary + "|" + node.CompactStrength + "|" + node.CompactAlerts + "|" + string.Join(";", node.CardMetrics.Select(m => m.Label + m.Value));
 
     private static string GetMeasureSignature(OobNode node) => node switch
     {
@@ -418,30 +438,25 @@ public partial class MainWindow : Window
     private void RefreshOobCanvas()
     {
         _visibleCanvasNodes.Clear();
-        ConnectorCanvas.Children.Clear();
 
         LayoutDisplayModel();
 
-        NodeCanvas.Children.Clear();
-        _detailVisualCache.Clear(); _lastDetailZoom = double.NaN;
-        var groupTemplate = (DataTemplate)FindResource(_category is CommandCategory.Fleet or CommandCategory.Unknown ? "InspectionTemplate" : "GroupNodeTemplate");
-        var unitTemplate = (DataTemplate)FindResource(_category is CommandCategory.Fleet or CommandCategory.Unknown ? "InspectionTemplate" : "CombatUnitTemplate");
+        _renderedCardDetails = ShowCardDetails;
+        var visible = _visibleCanvasNodes.Select(CachedCard).ToHashSet();
+        foreach (var card in NodeCanvas.Children.OfType<FrameworkElement>().Where(c => !visible.Contains(c)).ToArray()) NodeCanvas.Children.Remove(card);
         foreach (var node in _visibleCanvasNodes)
         {
-            var template = node is GroupNode ? groupTemplate : unitTemplate;
-            if (template.LoadContent() is not FrameworkElement element) continue;
-            element.DataContext = node;
-            element.Tag = node;
-            ConfigureCard(element, node);
+            var element = CachedCard(node);
+            SetCardDetailVisibility(element, ShowCardDetails);
             // Height remains Auto. The template gets exactly the vertical space its content requests.
             element.Visibility = Visibility.Visible;
             Panel.SetZIndex(element, 10);
-            NodeCanvas.Children.Add(element);
-            MonitorRenderedCard(element);
+            if (element.Parent is null) NodeCanvas.Children.Add(element);
         }
         RebuildConnectorVisuals();
         ApplyCanvasTransform();
         OobDebugText.Text += $" • {NodeCanvas.Children.Count:N0} rendered";
+        ScheduleCardDetailWarmup();
     }
 
     private void LayoutDisplayModel()
@@ -461,11 +476,13 @@ public partial class MainWindow : Window
         var rootOffset = 0.0;
         foreach (var layout in rootLayouts)
         {
-            var min = layout.Contours.Values.Min(c => c.Min);
-            var max = layout.Contours.Values.Max(c => c.Max);
+            var edges = layout.Commands.Select(c => (X: c.X, Width: GetNodeWidth(c.Command.Source)))
+                .Concat(layout.AttachedStacks.Select(a => (X: a.X, Width: a.Units.Max(GetNodeWidth)))).ToArray();
+            var min = edges.Min(c => c.X - c.Width / 2);
+            var max = edges.Max(c => c.X + c.Width / 2);
             var shift = rootOffset - min;
             ApplyTidyLayout(layout, shift, rankY);
-            rootOffset += (max - min + 1.0) + RootColumnGap;
+            rootOffset += max - min + Ui("oob.spacing.roots");
         }
 
         // Normalize ALL display coordinates into positive world space with generous
@@ -474,7 +491,7 @@ public partial class MainWindow : Window
         var standaloneY = 70.0;
         foreach (var unit in _displayModel.UnattachedUnits)
         {
-            unit.CanvasX = 100 + rootOffset * ColumnPitch; unit.CanvasY = standaloneY;
+            unit.CanvasX = 100 + rootOffset; unit.CanvasY = standaloneY;
             standaloneY += GetNodeHeight(unit) + UnitStackGap;
         }
         var allLaidOut = EnumerateAllLaidOutNodes().Distinct().ToList();
@@ -556,7 +573,8 @@ public partial class MainWindow : Window
             });
             // A combat stack extends below its first card. Reserve its column at
             // every lower HQ depth so another branch cannot weave into the stack.
-            for (var depth = 0; depth <= _layoutCommandDepth; depth++) attached.Contours[depth] = (0, 0);
+            var half = command.AttachedUnits.Max(u => (GetNodeWidth(u) + HorizontalGap(u)) / 2);
+            for (var depth = 0; depth <= _layoutCommandDepth; depth++) attached.Contours[depth] = (-half, half);
             branchLayouts.Add(attached);
         }
 
@@ -565,13 +583,13 @@ public partial class MainWindow : Window
         {
             result.RootX = 0;
             result.Commands.Add(new TidyPlacement { Command = command, X = 0, Depth = 0 });
-            result.Contours[0] = (0, 0);
+            var half = (GetNodeWidth(command.Source) + HorizontalGap(command.Source)) / 2;
+            result.Contours[0] = (-half, half);
             return result;
         }
 
         var placedChildren = new List<(TidyLayoutResult Layout, double Shift)>();
         var combined = new Dictionary<int, (double Min, double Max)>();
-        const double siblingGap = 1.0;
 
         foreach (var child in branchLayouts)
         {
@@ -584,7 +602,7 @@ public partial class MainWindow : Window
                 {
                     var globalDepth = childDepth + 1;
                     if (!combined.TryGetValue(globalDepth, out var prior)) continue;
-                    shift = Math.Max(shift, prior.Max + siblingGap - childContour.Min);
+                    shift = Math.Max(shift, prior.Max - childContour.Min);
                 }
             }
 
@@ -604,7 +622,8 @@ public partial class MainWindow : Window
         var lastRoot = placedChildren.Last().Layout.RootX + placedChildren.Last().Shift;
         result.RootX = (firstRoot + lastRoot) / 2.0;
         result.Commands.Add(new TidyPlacement { Command = command, X = result.RootX, Depth = 0 });
-        result.Contours[0] = (result.RootX, result.RootX);
+        var rootHalf = (GetNodeWidth(command.Source) + HorizontalGap(command.Source)) / 2;
+        result.Contours[0] = (result.RootX - rootHalf, result.RootX + rootHalf);
 
         foreach (var (child, shift) in placedChildren)
         {
@@ -621,12 +640,12 @@ public partial class MainWindow : Window
     {
         foreach (var p in layout.Commands)
         {
-            p.Command.Source.CanvasX = 100 + (p.X + shift) * ColumnPitch - GetNodeWidth(p.Command.Source) / 2;
+            p.Command.Source.CanvasX = 100 + p.X + shift - GetNodeWidth(p.Command.Source) / 2;
             p.Command.Source.CanvasY = rankY.GetValueOrDefault(p.Depth, 70) - GetSurfaceInset(p.Command.Source);
         }
         foreach (var a in layout.AttachedStacks)
         {
-            var centerX = 100 + (a.X + shift) * ColumnPitch;
+            var centerX = 100 + a.X + shift;
             var y = rankY.GetValueOrDefault(a.Depth, 70) - GetSurfaceInset(a.Units[0]);
             for (var i = 0; i < a.Units.Count; i++)
             {
@@ -787,7 +806,7 @@ public partial class MainWindow : Window
         _ui.Set("oob.presentation.regimentalScale", OobPresentation.RegimentalScale ? 1 : 0);
         foreach (var group in _data.Groups.Values) group.NotifyPresentationChanged();
         foreach (var unit in _data.Units) unit.NotifyPresentationChanged();
-        _nodeMeasuredHeights.Clear(); _nodeSurfaceInsets.Clear(); _nodeMeasureSignatures.Clear();
+        InvalidateCardMeasurements();
         RebuildSide();
         StatusText.Text = OobPresentation.RegimentalScale
             ? "Regimental-scale presentation active. Native GTCW Unit_Tier IDs are unchanged."
@@ -898,57 +917,47 @@ public partial class MainWindow : Window
         UpdateZoomDetailLevels();
     }
 
-    private readonly Dictionary<FrameworkElement, (FrameworkElement? Details, FrameworkElement? Nato, FrameworkElement? Identity)> _detailVisualCache = new();
-    private double _lastDetailZoom = double.NaN;
+    private bool ShowCardDetails => _zoom >= Ui("oob.zoom.detail");
+    private bool? _renderedCardDetails;
     private void UpdateZoomDetailLevels()
     {
-        if (NodeCanvas is null || (_lastDetailZoom == _zoom && _detailVisualCache.Count == NodeCanvas.Children.Count)) return;
-        _lastDetailZoom = _zoom;
-        foreach (var child in NodeCanvas.Children.OfType<FrameworkElement>())
-        {
-            if (!_detailVisualCache.TryGetValue(child, out var visuals))
-            {
-                visuals = (FindNamedDescendant<FrameworkElement>(child, "DetailBody"), FindNamedDescendant<FrameworkElement>(child, "NatoCounterHost"), FindNamedDescendant<FrameworkElement>(child, "ZoomIdentity"));
-                _detailVisualCache[child] = visuals;
+        if (_renderedCardDetails == ShowCardDetails) return;
+        _renderedCardDetails = ShowCardDetails;
+        // Keep the live visual/binding trees. Only detail visibility and geometry change.
+        // Retain both measured footprints so subsequent crossings need no probe templates.
+        WithViewportAnchor(() => {
+            foreach (var card in NodeCanvas.Children.OfType<FrameworkElement>()) {
+                var details = FindNamedDescendant<FrameworkElement>(card, "DetailBody");
+                if (details is not null) details.Visibility = ShowCardDetails ? Visibility.Visible : Visibility.Collapsed;
             }
-            var details = visuals.Details; var nato = visuals.Nato;
-            if (details is not null)
-            {
-                // Fade detail without changing the card footprint/position.
-                details.Opacity = _zoom >= Ui("oob.zoom.detail") ? 1 : 0;
-                details.IsHitTestVisible = details.Opacity >= .4;
-            }
-            if (visuals.Identity is not null)
-            {
-                // Identity replaces, rather than competes with, the detailed body.
-                // The local scale keeps its two lines legible as the canvas shrinks.
-                var identityScale = _zoom <= .36 ? 1.55 : _zoom >= .62 ? 1.0 : 1.0 + (.62 - _zoom) / .26 * .55;
-                visuals.Identity.Opacity = 1 - (details?.Opacity ?? 1);
-                visuals.Identity.RenderTransformOrigin = new Point(.5, .5);
-                visuals.Identity.RenderTransform = new ScaleTransform(identityScale, identityScale);
-                visuals.Identity.IsHitTestVisible = false;
-            }
-            if (nato is not null)
-            {
-                // At close zoom the counter is a modest tab above the detailed card.
-                // At far zoom it becomes the dominant representation in the same footprint.
-                var scale = _zoom >= 0.62 ? 0.72 : _zoom <= 0.36 ? 1.55 : 0.72 + (0.62 - _zoom) / 0.26 * 0.83;
-                // Zoom changes only rendering; configured bounds remain stable.
-                // Keep the counter attached to the card while zoom changes its visible size.
-                nato.RenderTransformOrigin = new Point(.5, 1);
-                nato.RenderTransform = new TransformGroup
-                {
-                    Children = new TransformCollection
-                    {
-                        new ScaleTransform(Math.Min(1.55, scale) / 1.55, Math.Min(1.55, scale) / 1.55),
-                        new TranslateTransform(Ui("oob.natoCounters.x"), 0)
-                    }
-                };
-                nato.Opacity = 1.0;
-            }
-        }
+            LayoutDisplayModel();
+            RebuildConnectorVisuals();
+            ApplyCanvasTransform();
+        });
     }
 
+    // Keep the nearest visible card fixed on screen across font/detail reflow.
+    // Manual nudges remain separate deltas applied by LayoutDisplayModel.
+    private void ReflowCardsAtAnchor()
+    {
+        _renderedCardDetails = ShowCardDetails;
+        InvalidateCardMeasurements();
+        WithViewportAnchor(RefreshOobCanvas);
+    }
+
+    private void WithViewportAnchor(Action reflow)
+    {
+        var anchor = _visibleCanvasNodes.OrderBy(n =>
+            Math.Pow(n.CanvasX * _zoom + _panX - OobViewport.ActualWidth / 2, 2) +
+            Math.Pow(n.CanvasY * _zoom + _panY - OobViewport.ActualHeight / 2, 2)).FirstOrDefault();
+        var before = anchor is null ? new Point() : new Point(anchor.CanvasX, anchor.CanvasY);
+        reflow();
+        if (anchor is not null) {
+            _panX += (before.X - anchor.CanvasX) * _zoom;
+            _panY += (before.Y - anchor.CanvasY) * _zoom;
+            ApplyCanvasTransform();
+        }
+    }
     private static T? FindNamedDescendant<T>(DependencyObject root, string name) where T : FrameworkElement
     {
         if (root is FrameworkElement fe && fe.Name == name && fe is T match) return match;
@@ -1152,8 +1161,8 @@ public partial class MainWindow : Window
 
     private void RefreshSummaries(bool relayout = false, IEnumerable<CombatUnitNode>? changedUnits = null)
     {
-        _data.RefreshGroupAggregates();
         var unitsToRefresh = changedUnits?.Distinct().ToList() ?? _data.Units.ToList();
+        _data.RefreshGroupAggregates(changedUnits is null ? null : unitsToRefresh);
         foreach (var unit in unitsToRefresh) unit.RefreshDisplay();
         if (relayout) RefreshOobCanvas();
         RefreshRoster();
@@ -1594,7 +1603,7 @@ public partial class MainWindow : Window
         Dispatcher.BeginInvoke(new Action(Close), System.Windows.Threading.DispatcherPriority.Background);
     }
 
-    protected override void OnClosed(EventArgs e) { _data.Dispose(); base.OnClosed(e); }
+    protected override void OnClosed(EventArgs e) { _cardCacheClosed = true; InvalidateCardMeasurements(); _data.Dispose(); base.OnClosed(e); }
     private void RosterShowChanges_Click(object sender, RoutedEventArgs e)
     {
         if (RosterGrid.SelectedItem is not RosterRow { Unit: CombatUnitNode unit }) return;

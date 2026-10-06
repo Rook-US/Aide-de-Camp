@@ -1,4 +1,10 @@
-# 0.8.10 validation
+# Validation
+
+For 0.8.12, see [Tree cache lifecycle and transition measurements](TREE_CACHE_VALIDATION.md).
+
+For the current 0.8.11 Tree update, see [Tree checks and rendered before/after evidence](TREE_VALIDATION.md). The 0.8.10 record below is retained as release history.
+
+## 0.8.10 validation
 
 Validated locally on Windows x64 on October 5, 2026:
 

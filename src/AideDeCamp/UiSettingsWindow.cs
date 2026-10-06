@@ -36,7 +36,7 @@ public sealed class UiSettingsWindow : Window
     private void Rebuild()
     {
         _rebuilding = true; _content.Children.Clear();
-        _content.Children.Add(new TextBlock { Text = "Changes preview live and persist on close. Name, commander, Home State and type always remain visible. Metrics hide below the detail zoom threshold. Counters always reserve layout space. Roster rows grow to fit text.\nSpacing labels follow the displayed brigade/regimental scale. Use the toolbar to switch scale or nudge a branch.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,0,0,12) });
+        _content.Children.Add(new TextBlock { Text = "Changes preview live and persist on close. Compact cards retain command, commander, parent, manpower, casualties and alerts. Zoom adds supplemental details.\nGaps measure card edges in pixels. Base gutters add to tier/column gaps; mixed columns share half of each column gap. Zero allows touching edges. Nudge offsets are retained.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0,0,0,12) });
         foreach (var section in UiSettingsService.Parameters.GroupBy(p => p.Section))
         {
             var header = new DockPanel { Margin = new Thickness(0,12,0,5) };

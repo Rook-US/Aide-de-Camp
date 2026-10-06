@@ -41,11 +41,31 @@ public abstract class OobNode : INotifyPropertyChanged
     public string CollapseGlyph => IsExpanded ? "−" : "+";
     public int Depth { get; set; }
     public FormationMetrics Metrics => this is GroupNode g ? g.DisplayMetrics : FormationMetrics.For(this);
-    public IReadOnlyList<CardMetric> CardMetrics => Metrics.Lines(this);
+    private IReadOnlyList<CardMetric>? _cardMetricRows;
+    public IReadOnlyList<CardMetric> CardMetrics {
+        get {
+            var rows = Metrics.Lines(this);
+            // Keep ItemsControl rows alive when a broader refresh reports unchanged
+            // values. Only a changed card replaces its metric rows.
+            if (_cardMetricRows is null || !_cardMetricRows.SequenceEqual(rows)) _cardMetricRows = rows;
+            return _cardMetricRows;
+        }
+    }
     public string IdentityCommander => this switch {
         GroupNode g => string.IsNullOrWhiteSpace(g.CommanderDisplayName) ? "Commander unassigned" : g.CommanderDisplayName,
         CombatUnitNode u => string.IsNullOrWhiteSpace(u.CommanderDisplayName) ? "Commander unassigned" : u.CommanderDisplayName, _ => "—" };
-    public string IdentitySecondary => this is CombatUnitNode u ? $"{u.HomeStateName} • {u.TypeName} • {u.TierName}" : $"Home State: unmapped • {((GroupNode)this).TierName} HQ";
+    public string IdentitySecondary {
+        get {
+            var path = this is CombatUnitNode u ? u.CommandPath : ((GroupNode)this).CommandPath;
+            var parent = path.Split(" › ", StringSplitOptions.RemoveEmptyEntries).LastOrDefault();
+            var tier = this is CombatUnitNode unit ? unit.TierName : ((GroupNode)this).TierName + " HQ";
+            var parentId = this is CombatUnitNode combat ? combat.ParentId : ((GroupNode)this).ParentId;
+            var membership = parent is not null ? "Under " + parent : parentId >= 0 ? $"Parent command #{parentId}" : this is GroupNode ? "Independent command" : "Unattached formation";
+            return tier + " • " + membership;
+        }
+    }
+    public string CompactStrength => $"{Metrics.Assigned:N0} men • {Metrics.Casualties:N0} casualties";
+    public string CompactAlerts => FormationMetrics.Alerts(this);
     public void NotifyPresentationChanged() { OnPropertyChanged(nameof(GroupNode.TierName)); OnPropertyChanged(nameof(CombatUnitNode.TierName)); OnPropertyChanged(nameof(GroupNode.PresentationTier)); OnPropertyChanged(nameof(CombatUnitNode.PresentationTier)); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -135,7 +155,7 @@ public sealed class GroupNode : OobNode
 
     public void NotifyAggregateChanged()
     {
-        OnPropertyChanged(nameof(Metrics)); OnPropertyChanged(nameof(CardMetrics));
+        OnPropertyChanged(nameof(Metrics)); OnPropertyChanged(nameof(CardMetrics)); OnPropertyChanged(nameof(CompactStrength)); OnPropertyChanged(nameof(CompactAlerts));
         OnPropertyChanged(nameof(IdentityCommander)); OnPropertyChanged(nameof(IdentitySecondary));
         foreach (var name in AggregatePropertyNames) OnPropertyChanged(name);
     }
@@ -560,7 +580,7 @@ public sealed class CombatUnitNode : OobNode
 
     public void RefreshDisplay()
     {
-        OnPropertyChanged(nameof(Metrics)); OnPropertyChanged(nameof(CardMetrics));
+        OnPropertyChanged(nameof(Metrics)); OnPropertyChanged(nameof(CardMetrics)); OnPropertyChanged(nameof(CompactStrength)); OnPropertyChanged(nameof(CompactAlerts));
         OnPropertyChanged(nameof(IdentityCommander)); OnPropertyChanged(nameof(IdentitySecondary));
         SearchIndex = string.Join("\u001F", Name, TypeName, HomeStateName, CommandPath, CommanderName, WeaponName, RaisedText, ContractRemainingText);
         foreach (var name in new[] { nameof(Name), nameof(FieldStrength), nameof(Casualties), nameof(TotalStrength), nameof(StrengthPercentExact), nameof(StrengthPercent), nameof(ReadinessStatus), nameof(ReadinessIcon), nameof(ReadinessBrush), nameof(ReadinessLabel), nameof(TransferDays), nameof(IsInTransfer), nameof(TransferMarker), nameof(CardBackground), nameof(CardBorder), nameof(HomeStateName), nameof(WeaponName), nameof(TypeName), nameof(TierName), nameof(CommandPath), nameof(ContractMonths), nameof(ContractRemainingMonths), nameof(ContractRemainingText), nameof(ContractRisk), nameof(ContractRiskBrush), nameof(ContractRiskLabel), nameof(ExperienceRaw), nameof(IsBatchSelected), nameof(SearchIndex), nameof(PathLinkStatus), nameof(PathLinkMessage), nameof(CommanderDisplayName) }) OnPropertyChanged(name);

@@ -125,18 +125,18 @@ public sealed class GrandTacticianDataService : IDisposable
     {
         foreach (var g in _groups.Values) g.Children.Clear();
         var roots = new List<OobNode>();
-        foreach (var group in _groups.Values.Where(g => g.Nation == nation))
+        foreach (var group in _groups.Values)
         {
-            if (group.ParentId >= 0 && _groups.TryGetValue(group.ParentId, out var parent) && parent.Nation == nation) parent.Children.Add(group);
+            if (group.ParentId >= 0 && _groups.TryGetValue(group.ParentId, out var parent) && parent.Nation == group.Nation) parent.Children.Add(group);
             else roots.Add(group);
         }
         foreach (var unit in _units)
         {
-            if (_groups.TryGetValue(unit.ParentId, out var parent) && parent.Nation == nation) parent.Children.Add(unit);
+            if (_groups.TryGetValue(unit.ParentId, out var parent) && parent.Nation == unit.Nation) parent.Children.Add(unit);
         }
         SortTree(roots);
         RefreshGroupAggregates();
-        return roots;
+        return roots.Where(r => r is GroupNode g && g.Nation == nation).ToList();
     }
 
     public async Task<SaveResult> SaveAsync()
@@ -339,12 +339,18 @@ public sealed class GrandTacticianDataService : IDisposable
         return filtered.Count > 0 ? filtered : all;
     }
 
-    public void RefreshGroupAggregates()
+    public void RefreshGroupAggregates(IEnumerable<CombatUnitNode>? changedUnits = null)
     {
+        var affected = new HashSet<GroupNode>();
+        if (changedUnits is null) affected.UnionWith(_groups.Values);
+        else foreach (var unit in changedUnits) {
+            var parentId = unit.ParentId;
+            while (_groups.TryGetValue(parentId, out var parent) && affected.Add(parent)) parentId = parent.ParentId;
+        }
         // Two-phase invalidation prevents a parent from rebuilding its cache while a child
         // still holds an aggregate snapshot from the previous edit.
-        foreach (var group in _groups.Values) group.InvalidateAggregateCache();
-        foreach (var group in _groups.Values) group.NotifyAggregateChanged();
+        foreach (var group in affected) group.InvalidateAggregateCache();
+        foreach (var group in affected) group.NotifyAggregateChanged();
     }
 
     private static IEnumerable<CombatUnitNode> EnumerateUnits(OobNode node)

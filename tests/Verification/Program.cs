@@ -233,6 +233,14 @@ try
     Check(!metricDivision.CardMetrics.Any(m => m.Label == "Cavalry") && metricDivision.CardMetrics.Any(m => m.Label.Contains("Casualties")), "Zero composition lines omitted while casualties remain visible");
     infantry.TotalMenRaw = 2000; metricRoot.RefreshAggregates();
     Check(metricRoot.Metrics.Assigned == 2420, "Metric cache invalidation reflects changed leaf manpower");
+    var alertRoot = new GroupNode { GroupId=800, CommanderDisplayName="MG Fixture" };
+    var alertChild = new GroupNode { GroupId=801, CommanderDisplayName="BG Fixture" };
+    var alertUnit = new CombatUnitNode { UnitId=802, TotalMenRaw=100, ConfiguredMaxStrength=1000, TransferTimeRaw=3, CommanderDisplayName="COL Fixture" };
+    alertChild.Children.Add(alertUnit); alertRoot.Children.Add(alertChild); alertRoot.Children.Add(alertUnit);
+    Check(alertRoot.Metrics.Assigned==100 && alertRoot.Metrics.CombatUnits==1, "Compact totals count a shared combat leaf once");
+    Check(alertRoot.CompactAlerts=="1 low strength (1 critical) • 1 in transfer", "Subordinate alerts count a shared leaf once with meaningful labels");
+    Check(alertUnit.CompactStrength=="100 men • 0 casualties", "Compact strength labels manpower and casualties independently");
+    Check(ReferenceEquals(alertUnit.CardMetrics, alertUnit.CardMetrics), "Unchanged metrics retain their cached rows");
     OobPresentation.RegimentalScale = true;
     Check(metricDivision.IdentitySecondary.Contains("Brigade") && metricDivision.UnitTier == 14, "Card identity uses presentation scale without mutating native tiers");
     OobPresentation.RegimentalScale = false;
@@ -291,9 +299,9 @@ try
     Check(new UiSettingsService(loadSaved: false).Get("oob.spacing.stack") >= 0, "Combat stack spacing remains a valid independent setting");
     Check(UiSettingsService.Parameters.Single(p => p.Key == "oob.spacing.stack").Default == 32,
         "Default combat stacks have a 32-unit gap independent of the HQ gutter");
-    Check(UiSettingsService.Parameters.Single(p => p.Key == "oob.spacing.commands").Default >= 100 &&
-        UiSettingsService.Parameters.Single(p => p.Key == "oob.spacing.division").Default >= 96,
-        "Default HQ horizontal and vertical gaps leave visible breathing room");
+    Check(UiSettingsService.Parameters.Single(p => p.Key == "oob.spacing.commands").Default == 24 &&
+        UiSettingsService.Parameters.Single(p => p.Key == "oob.spacing.division").Default == 32,
+        "Compact defaults reserve modest edge gutters");
     var numberingProbe = new NamingSchemeService { Classify = _ => CommandCategory.FieldCommand };
     var numbered = new CombatUnitNode { UnitId = 9001, Name = "49th Ohio", Nation = 0, StateId = 29, HomeStateName = "Ohio", UnitType = 0, UnitTier = 13 };
     var unnumbered = new CombatUnitNode { UnitId = 2, Name = "Ohio Volunteers", Nation = 0, StateId = 29, HomeStateName = "Ohio", UnitType = 0, UnitTier = 13 };
