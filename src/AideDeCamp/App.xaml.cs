@@ -7,6 +7,7 @@ namespace AideDeCamp;
 
 public partial class App : Application
 {
+    private static string SmokeResultPath=>Environment.GetEnvironmentVariable("AIDE_DE_CAMP_SMOKE_RESULT")??Path.Combine(AppContext.BaseDirectory,"smoke-test.json");
     protected override void OnStartup(StartupEventArgs e)
     {
         DispatcherUnhandledException += App_DispatcherUnhandledException;
@@ -19,7 +20,7 @@ public partial class App : Application
                 Dispatcher.BeginInvoke(new Action(()=>{
                     try {
                         probe.UpdateLayout();
-                        File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"smoke-test.json"),System.Text.Json.JsonSerializer.Serialize(new {
+                        File.WriteAllText(SmokeResultPath,System.Text.Json.JsonSerializer.Serialize(new {
                             success=true,title=probe.Title,runtime=System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(),
                             framework=System.Runtime.InteropServices.RuntimeInformation.FrameworkDescription,architecture=System.Runtime.InteropServices.RuntimeInformation.ProcessArchitecture.ToString()
                         }));Shutdown(0);
@@ -48,7 +49,7 @@ public partial class App : Application
     }
     private void SmokeFailure(Exception ex) {
         Services.ErrorLog.Write("Packaged startup verification",ex);
-        try{File.WriteAllText(Path.Combine(AppContext.BaseDirectory,"smoke-test.json"),System.Text.Json.JsonSerializer.Serialize(new {success=false,error=ex.ToString()}));}catch{}
+        try{File.WriteAllText(SmokeResultPath,System.Text.Json.JsonSerializer.Serialize(new {success=false,error=ex.ToString()}));}catch{}
         Shutdown(1);
     }
 

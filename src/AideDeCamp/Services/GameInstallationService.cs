@@ -129,8 +129,9 @@ public sealed class GameInstallationService
     {
         var dirName = new DirectoryInfo(saveDir).Name;
         var scenario = Path.Combine(saveDir, "scenario.dat");
-        var gameDate = ReadGameDate(scenario);
-        var modified = File.GetLastWriteTime(Path.Combine(saveDir, "regiments.dat"));
+        var metadata=SaveMetadata.Read(saveDir);
+        var gameDate = metadata.Date;
+        var modified = metadata.Modified;
         var isAuto = dirName.Equals("Save", StringComparison.OrdinalIgnoreCase);
         return new SaveEntry
         {
@@ -138,7 +139,7 @@ public sealed class GameInstallationService
             IsAutosave = isAuto,
             LastModified = modified,
             GameDate = gameDate,
-            DisplayName = isAuto ? "Autosave" : FormatSaveFolderName(dirName)
+            DisplayName = metadata.SaveName+(isAuto?" (Autosave)":"")
         };
     }
 
@@ -189,14 +190,14 @@ public sealed class GameInstallationService
             {
                 var useful = File.ReadLines(descriptor)
                     .Select(l => l.Trim())
-                    .Where(l => !string.IsNullOrWhiteSpace(l))
+                    .Where(l => !string.IsNullOrWhiteSpace(l) && !l.StartsWith("//"))
                     .Take(2)
                     .ToArray();
                 if (useful.Length > 0)
                 {
                     var candidate = useful[0];
                     if (candidate.Length > 90) candidate = candidate[..90] + "…";
-                    return $"{candidate}  [{Path.GetRelativePath(campaignsRoot, campaignDir)}]";
+                    return $"{new DirectoryInfo(campaignDir).Name} — {candidate}";
                 }
             }
             catch { }

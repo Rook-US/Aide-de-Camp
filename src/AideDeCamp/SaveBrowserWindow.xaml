@@ -32,7 +32,7 @@
                 <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
                     <TextBlock Text="SAVES" Foreground="#8999A7" FontSize="10" Margin="3,0,0,7"/>
                     <ListBox Grid.Row="1" x:Name="SaveList" MouseDoubleClick="SaveList_MouseDoubleClick">
-                        <ListBox.ItemTemplate><DataTemplate><Grid Margin="5,6"><Grid.ColumnDefinitions><ColumnDefinition Width="260"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><TextBlock Text="{Binding DisplayName}" FontFamily="Consolas"/><TextBlock Grid.Column="1" Text="{Binding DetailText}" Foreground="#8FA0AE"/></Grid></DataTemplate></ListBox.ItemTemplate>
+                        <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="5,6"><TextBlock Text="{Binding DisplayName}" FontWeight="SemiBold" TextWrapping="Wrap"/><TextBlock Text="{Binding DetailText}" Foreground="#8FA0AE" Margin="0,4,0,0" TextWrapping="Wrap"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
                     </ListBox>
                 </Grid>
             </Border>

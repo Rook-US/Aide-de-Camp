@@ -4,9 +4,9 @@ A Windows save editor for **Grand Tactician: The Civil War (1861–1865)**. Edit
 
 ## Download and run
 
-Download the `Aide-de-Camp-0.8.13-win-x64.zip` asset from [Releases](https://github.com/Rook-US/Aide-de-Camp/releases). Extract the entire ZIP, then open **Aide-de-Camp.exe** inside the extracted folder. Keep its companion files together. The .NET runtime is included; no separate .NET installation is required. GitHub's automatically generated “Source code” archives are for developers, not the runnable app.
+Download the `Aide-de-Camp-0.8.15-win-x64.zip` asset from [Releases](https://github.com/Rook-US/Aide-de-Camp/releases). Extract the ZIP and open **Aide-de-Camp.exe**. The release root contains only the executable and this README as files; guides and license notices are in `docs` and `licenses`. The .NET runtime is built into the executable; no separate .NET installation is required. GitHub's automatically generated “Source code” archives are for developers, not the runnable app.
 
-Requires Windows 10/11 x64 and your own game installation. Version **0.8.13 is a preview**: automated save and UI checks pass, but campaign acceptance testing inside the game remains outstanding. Start with a copied campaign and keep your original saves.
+Requires Windows 10/11 x64 and your own game installation. Version **0.8.15 is an alpha**: automated save and UI checks pass, but campaign acceptance testing inside the game remains outstanding. Start with a copied campaign and keep your original saves.
 
 ## Features
 
@@ -15,7 +15,8 @@ Requires Windows 10/11 x64 and your own game installation. Version **0.8.13 is a
 - Officers with experience, fame, attributes, traits, branch, and promotion dates.
 - Weapon stockpiles editable per nation, but standardization and order editing need work.
 - Nation views for eligible recruitment states, treasury, projects with stage boxes, subsidy funding, and policy progress.
-- Checked-field batch edits for units, ships, officers, and weapons; review, backups, and undo support.
+- Full-field selection editing, with separate infantry/cavalry/artillery groups, filtered weapons, strength/gun previews, and one undoable commit.
+- Cell copy/paste across roster selections, plus persistent campaign/save/date/player information.
 - Compact Tree cards with readable command/strength/alerts, responsive edge gaps, and preserved Nudge offsets.
 - Adjustable UI settings and application error logs.
 

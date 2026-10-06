@@ -27,6 +27,13 @@ internal static partial class Program
         try {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Aide-de-Camp;component/Themes/Dark.xaml", UriKind.Relative) });
+            if(args.Length==3 && args[0]=="--population-checks") {
+                var populationWindow=new MainWindow(true);
+                var populationData=(GrandTacticianDataService)typeof(MainWindow).GetField("_data",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(populationWindow)!;
+                populationData.LoadAsync(args[1],args[2]).GetAwaiter().GetResult();populationWindow.Show();
+                CheckPopulationRoster(populationWindow,populationData,app);
+                Console.WriteLine($"ALL {checks} POPULATION UI CHECKS PASSED");app.Shutdown();return 0;
+            }
             if (args.Length == 2 && args[0] == "--tree-evidence") { TreeEvidence(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--tree-checks") { TreeEvidence(args[1], true); Console.WriteLine($"ALL {checks} TREE CHECKS PASSED"); return 0; }
             if (args.Length == 2 && args[0] == "--tree-performance") { TreePerformance(args[1]); return 0; }
@@ -233,6 +240,7 @@ internal static partial class Program
                 var officer=realData.Management!.Records.First(r=>r.Domain=="Officers" && r.Side==1);
                 CheckNationBoards(managementWindow,realData,app);
                 CheckManagementBatches(managementWindow,realData,app);
+                CheckPopulationRoster(managementWindow,realData,app);
                 typeof(MainWindow).GetMethod("NationView_Click",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(managementWindow,new object[]{new Button{Tag="States"},new RoutedEventArgs()});Flush(managementWindow);
                 var edit=new ManagementEditWindow(realData.Management,officer,officer.Name){Owner=managementWindow};
                 edit.Dispatcher.BeginInvoke(new Action(()=>{
@@ -240,7 +248,7 @@ internal static partial class Program
                     var check=Descendants(edit).OfType<CheckBox>().Single(c=>c.Content is TextBlock t && t.Text.StartsWith("Experience"));
                     check.IsChecked=true;
                     ((Grid)check.Parent).Children.OfType<TextBox>().Single().Text="37.5";
-                    Descendants(edit).OfType<Button>().Single(b=>b.Content?.ToString()=="Stage changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                    Descendants(edit).OfType<Button>().Single(b=>b.Content?.ToString()=="Commit changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                 }),DispatcherPriority.ApplicationIdle);
                 Check(edit.ShowDialog()==true && edit.Changes!.Single().Value=="37.5" && !realData.Management.HasChanges,"Officer dialog stages checked fields without mutating the document before Apply");
                 var stateId=realData.Management.Records.First(r=>r.Domain=="Economy").Id;
@@ -256,6 +264,7 @@ internal static partial class Program
                 typeof(MainWindow).GetField("_allowClose",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(managementWindow,true);
                 managementWindow.Close();
             }
+            CheckPolish(window,data);
             Console.WriteLine($"ALL {checks} WINDOWS UI CHECKS PASSED");
             typeof(MainWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, true);
             window.Close(); app.Shutdown(); return 0;

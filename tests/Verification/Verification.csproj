@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
  <ItemGroup>
+  <Compile Include="../../src/AideDeCamp/Services/SelectionEditPlan.cs" Link="Services/SelectionEditPlan.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/SaveMetadata.cs" Link="Services/SaveMetadata.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/AppPaths.cs" Link="Services/AppPaths.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/ManagementBatchPlanner.cs" Link="Services/ManagementBatchPlanner.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/NationProgression.cs" Link="Services/NationProgression.cs"/>

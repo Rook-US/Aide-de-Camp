@@ -156,6 +156,9 @@ public partial class MainWindow : Window
             _groupNameDrafts.Clear();
             InvalidateCardMeasurements();
             await _data.LoadAsync(path, _configDirectory);
+            var metadata=SaveMetadata.Read(_data.SaveDirectory!,_configDirectory);
+            SaveInfoText.Text=metadata.Summary;
+            SaveInfoText.ToolTip=$"Last modified: {metadata.Modified:G}\n{path}";
             LoadDisplayMetadata();
             _savedDisplayState = DisplayState();
             _loadedSnapshots = _editSession.Capture(_data.Units);
@@ -1354,6 +1357,7 @@ public partial class MainWindow : Window
         try
         {
             RosterGrid.SelectedItems.Clear();
+            RosterGrid.UnselectAllCells();
             foreach (var row in _rosterRows)
                 if (row.Unit is CombatUnitNode unit && _selectedUnits.Contains(unit)) RosterGrid.SelectedItems.Add(row);
             var first = RosterGrid.SelectedItems.OfType<RosterRow>().FirstOrDefault();
@@ -1430,14 +1434,19 @@ public partial class MainWindow : Window
         }
 
         _previousBatches[WorkspaceKey] = units.Select(u => u.UnitId).ToHashSet();
-        var dialog = new BatchEditWindow(units, _data.WeaponOptions, _batchPlanner) { Owner = this };
-        if (dialog.ShowDialog() != true || !dialog.Applied || dialog.Plan is null) return;
+        if(units.Any(u=>_typedDrafts.TryGetValue(u,out var draft)&&draft.Dirty)) {
+            StatusText.Text="Apply or discard the selected units' existing cell/detail drafts before opening Edit Selected.";
+            return;
+        }
+        var dialog = new SelectionEditWindow(units, _data.WeaponOptions, _data.StateOptions, _validation) { Owner = this };
+        if (dialog.ShowDialog() != true || dialog.Plan is null) return;
         var plan = dialog.Plan;
-        if (!_editSession.Execute($"Batch edit {plan.ChangedUnitCount:N0} unit(s)", plan.ChangedUnits, () => _batchPlanner.Apply(plan))) return;
-        RefreshSummaries(plan.Request.EtaDays.HasValue, plan.ChangedUnits);
+        var changed=plan.Changes.Select(p=>p.Unit).ToArray();
+        bool eta=plan.Changes.Any(p=>p.Unit.TransferTimeRaw!=p.Candidate.TransferTimeRaw);
+        if (!_editSession.Execute($"Edit {changed.Length:N0} unit(s)", changed, plan.Apply)) return;
+        RefreshSummaries(eta, changed);
         UpdateDirtyState();
-        var skipped = plan.SkippedUnitCount > 0 ? $" • {plan.SkippedUnitCount:N0} unit(s) had skipped fields" : string.Empty;
-        StatusText.Text = $"Batch working changes applied to {plan.ChangedUnitCount:N0} unit(s){skipped}. Ctrl+Z undoes the batch; Save Changes writes it to disk.";
+        StatusText.Text = $"Changes staged for {changed.Length:N0} of {units.Count:N0} selected units. Ctrl+Z undoes the batch; Save changes writes it to disk.";
     }
 
     private void RefreshAlerts()
