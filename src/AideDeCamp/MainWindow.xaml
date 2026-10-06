@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:AideDeCamp.Models"
         xmlns:local="clr-namespace:AideDeCamp"
-        Title="Aide-de-Camp 0.8.10" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
+        Title="Aide-de-Camp 0.8.11" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
         Background="#11161C" Foreground="#E8EDF2" KeyDown="Window_KeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -36,9 +36,11 @@
                         <DockPanel x:Name="AlwaysIdentity">
                             <Button DockPanel.Dock="Left" Content="{Binding CollapseGlyph}" Width="26" Height="24" Padding="0" Margin="0,0,7,0" Click="ToggleGroup_Click" ToolTip="Collapse/restore command"/>
                             <StackPanel>
-                                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding IdentityCommander}" FontSize="14" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
-                                <TextBlock Text="{Binding IdentitySecondary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding IdentityCommander}" FontSize="16" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding IdentitySecondary}" FontSize="15" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding CompactStrength}" FontSize="16" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding CompactAlerts}" FontSize="14" Foreground="#F2C66D" TextWrapping="Wrap" Margin="0,3,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding CompactAlerts}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
                             </StackPanel>
                         </DockPanel>
                         <Grid x:Name="DetailBody" Grid.Row="1" Margin="0,6,0,0"><StackPanel>
@@ -59,9 +61,11 @@
                         <DockPanel x:Name="AlwaysIdentity">
 
                             <StackPanel>
-                                <TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap"/>
-                                <TextBlock Text="{Binding IdentityCommander}" FontSize="14" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
-                                <TextBlock Text="{Binding IdentitySecondary}" FontSize="11" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="Bold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap"/>
+                                <TextBlock Text="{Binding IdentityCommander}" FontSize="16" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding IdentitySecondary}" FontSize="15" Foreground="{StaticResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,3,0,0"/>
+                                <TextBlock Text="{Binding CompactStrength}" FontSize="16" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" Margin="0,4,0,0"/>
+                                <TextBlock Text="{Binding CompactAlerts}" FontSize="14" Foreground="#F2C66D" TextWrapping="Wrap" Margin="0,3,0,0"><TextBlock.Style><Style TargetType="TextBlock"><Style.Triggers><DataTrigger Binding="{Binding CompactAlerts}" Value=""><Setter Property="Visibility" Value="Collapsed"/></DataTrigger></Style.Triggers></Style></TextBlock.Style></TextBlock>
                             </StackPanel>
                         </DockPanel>
                         <Grid x:Name="DetailBody" Grid.Row="1" Margin="0,6,0,0"><StackPanel>
@@ -72,7 +76,7 @@
                 </Border>
             </Grid>
         </DataTemplate>
-        <DataTemplate x:Key="InspectionTemplate"><Border Background="#202A34" BorderBrush="#7A7054" BorderThickness="1" Padding="12" MouseLeftButtonDown="NodeCard_MouseLeftButtonDown"><StackPanel><TextBlock Text="{Binding Name}" FontSize="16" FontWeight="Bold"/><TextBlock Text="{Binding TierName}"/><TextBlock Text="{Binding CommanderName}"/><TextBlock Text="Inspection only • Classification / naval data WIP" Foreground="#E9C46A" Margin="0,8,0,0"/></StackPanel></Border></DataTemplate>
+        <DataTemplate x:Key="InspectionTemplate"><Border Background="#202A34" BorderBrush="#7A7054" BorderThickness="1" Padding="12" MouseLeftButtonDown="NodeCard_MouseLeftButtonDown"><StackPanel><TextBlock Text="{Binding Name}" FontSize="18" FontWeight="Bold"/><TextBlock Text="{Binding TierName}"/><TextBlock Text="{Binding CommanderName}"/><TextBlock Text="Inspection only • Classification / naval data WIP" Foreground="#E9C46A" Margin="0,8,0,0"/></StackPanel></Border></DataTemplate>
     </Window.Resources>
 
     <Grid>

@@ -50,6 +50,7 @@ public sealed record FormationMetrics(long Assigned, long Present, long Casualti
             rows.Add(new("Casualties / unavailable", u.Casualties.ToString("N0")));
             if (u.UnitType == 2) rows.Add(new("Guns", u.GunCount?.ToString("N0") ?? "Unmapped"));
             rows.Add(new("Weapon", u.WeaponName));
+            rows.Add(new("Experience", u.ExperienceRaw.ToString("0.###")));
             rows.Add(new("Contract", $"{u.ContractMonths} months"));
             rows.Add(new("Remaining", u.ContractRemainingMonths is int remaining
                 ? $"{remaining} months ({(u.ContractMonths > 0 ? (remaining * 100.0 / u.ContractMonths).ToString("0") + "%" : "—")})"
@@ -57,5 +58,33 @@ public sealed record FormationMetrics(long Assigned, long Present, long Casualti
             rows.Add(new("Transfer ETA", $"{u.TransferDays} days"));
         }
         return rows;
+    }
+
+    public static string Alerts(OobNode node)
+    {
+        var seen = new HashSet<OobNode>();
+        var units = new List<CombatUnitNode>();
+        var unassignedHeadquarters = 0;
+        void Visit(OobNode n) {
+            if (!seen.Add(n)) return;
+            if (n is CombatUnitNode u) { if (u.IsLandAsset) units.Add(u); return; }
+            if (n is GroupNode g && !g.IsLandCommand) return;
+            if (n != node && n.IdentityCommander == "Commander unassigned") unassignedHeadquarters++;
+            foreach (var child in n.Children) Visit(child);
+        }
+        Visit(node);
+        var parts = new List<string>();
+        var low = units.Count(u => u.ConfiguredMaxStrength > 0 && u.ReadinessStatus != ReadinessLevel.Normal);
+        var critical = units.Count(u => u.ConfiguredMaxStrength > 0 && u.ReadinessStatus == ReadinessLevel.Red);
+        var transfers = units.Count(u => u.IsInTransfer);
+        var contracts = units.Count(u => u.ContractRisk != ContractRiskLevel.None);
+        if (low > 0) parts.Add(node is CombatUnitNode ? $"Low strength ({units[0].StrengthPercent}%)" : $"{low} low strength ({critical} critical)");
+        if (transfers > 0) parts.Add(node is CombatUnitNode ? $"Transfer: {units[0].TransferDays}d" : $"{transfers} in transfer");
+        if (contracts > 0) parts.Add(node is CombatUnitNode ? units[0].ContractRiskLabel : $"{contracts} contract alerts");
+        if (string.IsNullOrWhiteSpace(node.IdentityCommander) || node.IdentityCommander == "Commander unassigned") parts.Add("Commander unassigned");
+        var missingCommanders = units.Count(u => u != node && u.IdentityCommander == "Commander unassigned");
+        if (missingCommanders > 0) parts.Add($"{missingCommanders} units without commanders");
+        if (unassignedHeadquarters > 0) parts.Add($"{unassignedHeadquarters} HQs without commanders");
+        return string.Join(" • ", parts);
     }
 }

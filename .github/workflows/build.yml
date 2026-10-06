@@ -23,6 +23,8 @@ jobs:
         run: dotnet run --project tests/Verification -c Release --no-build
       - name: Verify WPF interface
         run: dotnet run --project tests/UiVerification -c Release --no-build
+      - name: Verify Tree layout and capture synthetic evidence
+        run: dotnet run --project tests/UiVerification -c Release --no-build -- --tree-checks artifacts/tree-after
       - name: Package
         run: ./scripts/Package.ps1
       - name: Verify extracted package
@@ -37,4 +39,6 @@ jobs:
             artifacts/*.zip
             artifacts/*.sha256
             artifacts/package-verification.json
+            artifacts/tree-after/*.png
+            artifacts/tree-after/geometry.txt
           if-no-files-found: error

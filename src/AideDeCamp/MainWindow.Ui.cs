@@ -31,15 +31,15 @@ public partial class MainWindow
         ManagementGrid.MinRowHeight = Ui("roster.density.rowHeight");
         RosterRow.HierarchyIndent = Ui("roster.hierarchy.indent");
         _nodeMeasuredHeights.Clear(); _nodeSurfaceInsets.Clear(); _nodeMeasureSignatures.Clear();
-        RefreshOobCanvas(); RefreshRoster();
+        ReflowCardsAtAnchor(); RefreshRoster();
         if (_ui.LoadWarning is not null) StatusText.Text = _ui.LoadWarning;
     }
     private static double NodeTierScale(OobNode node) => CardLayoutGeometry.TierScale(node is GroupNode, node is GroupNode group ? group.UnitTier : 13);
     private double NodeCardScale(OobNode node) => CardScale * NodeTierScale(node);
     private double CardFootprintWidth(bool group)
     {
-        var width = (group ? 470 : 360) * Math.Max(1, Ui("oob.cards.textScale"));
-        width = Math.Max(width, (group ? 102 : 92) * Ui("oob.natoCounters.scale") * 1.55 + Math.Abs(Ui("oob.natoCounters.x")) * 2 + Ui("oob.cards.padding") * 2);
+        var width = (group ? 350 : 330) * Math.Max(1, Ui("oob.cards.textScale"));
+        width = Math.Max(width, (group ? 102 : 92) * Ui("oob.natoCounters.scale") + Math.Abs(Ui("oob.natoCounters.x")) * 2 + Ui("oob.cards.padding") * 2);
         return width * CardScale;
     }
     private bool _cardReflowQueued;
@@ -61,9 +61,11 @@ public partial class MainWindow
             Dispatcher.BeginInvoke(new Action(() => {
                 _cardReflowQueued = false;
                 if (!IsLoaded || _allowClose) return;
-                LayoutDisplayModel();
-                RebuildConnectorVisuals();
-                ApplyCanvasTransform();
+                WithViewportAnchor(() => {
+                    LayoutDisplayModel();
+                    RebuildConnectorVisuals();
+                    ApplyCanvasTransform();
+                });
             }), System.Windows.Threading.DispatcherPriority.Loaded);
         };
     }
@@ -85,8 +87,10 @@ public partial class MainWindow
             cardSurface.Padding = new Thickness(Ui("oob.cards.padding"));
             if (cardSurface.Background is Brush b) { var clone = b.CloneCurrentValue(); clone.Opacity = Ui("oob.cards.opacity"); cardSurface.Background = clone; }
         }
+        var details = FindNamedDescendant<FrameworkElement>(element, "DetailBody");
+        if (details is not null) details.Visibility = ShowCardDetails ? Visibility.Visible : Visibility.Collapsed;
         var textScale = Ui("oob.cards.textScale");
-        element.Resources["MetricFontSize"] = 11.0 * textScale;
+        element.Resources["MetricFontSize"] = 14.0 * textScale;
         element.Resources["MetricRowMargin"] = new Thickness(0, Ui("oob.cards.spacing"), 0, 0);
         foreach (var text in VisualDescendants(element).OfType<TextBlock>())
         {
@@ -112,9 +116,9 @@ public partial class MainWindow
         if (nato is null) return;
         nato.EchelonScale = Ui("oob.natoCounters.echelonScale");
         nato.ShowHqStaff = Ui("oob.natoCounters.hqStaff") >= .5;
-        var factor = Ui("oob.natoCounters.scale") * 1.55;
+        var factor = Ui("oob.natoCounters.scale");
         nato.Width *= factor; nato.Height = (nato.Height + 10 * (nato.EchelonScale - 1)) * factor;
-        // The counter is deliberately a sibling above CardSurface. Its Auto grid row
+        // The counter keeps the same scale at every detail level. Its Auto grid row
         // reserves space in every measured footprint, so scale changes never crowd the
         // card's title/metrics or make adjacent nodes collide.
         nato.Margin = new Thickness(0, Math.Max(0, Ui("oob.natoCounters.y")), 0, Math.Max(0, -Ui("oob.natoCounters.y")) - 9);

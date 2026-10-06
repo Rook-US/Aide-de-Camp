@@ -1,6 +1,6 @@
 # Known limits
 
-- Version 0.8.10 is a preview. Automated service, UI, and packaging tests do not replace acceptance testing inside a running campaign. Start with copies of saves.
+- Version 0.8.11 is a preview. Automated service, UI, and packaging tests do not replace acceptance testing inside a running campaign. Start with copies of saves.
 - Mappings were investigated against game version 1.142. Other versions or DLC-specific structures may differ.
 - Recruitment availability is projected from mapped population and campaign rules. The game determines the final usable pool; increasing population is not a guarantee of an identical immediate volunteer increase.
 - HQ experience and abilities remain incompletely mapped. Do not infer them from troop or officer experience.

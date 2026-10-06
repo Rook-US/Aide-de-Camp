@@ -27,6 +27,8 @@ internal static partial class Program
         try {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Aide-de-Camp;component/Themes/Dark.xaml", UriKind.Relative) });
+            if (args.Length == 2 && args[0] == "--tree-evidence") { TreeEvidence(args[1]); return 0; }
+            if (args.Length == 2 && args[0] == "--tree-checks") { TreeEvidence(args[1], true); Console.WriteLine($"ALL {checks} TREE CHECKS PASSED"); return 0; }
             // No installation detection and no access to user save files.
             var window = new MainWindow(true);
             var data = (GrandTacticianDataService)typeof(MainWindow).GetField("_data", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
