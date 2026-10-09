@@ -1,3 +1,29 @@
+# Aide-de-Camp 0.8.16 — Unit Creation Test Build
+
+Alpha prerelease for Windows x64. Extract `Aide-de-Camp-0.8.16-win-x64.zip` and run
+`Aide-de-Camp.exe`; the .NET runtime is included. Start with a copied campaign.
+
+## Included
+
+- Create land HQs and infantry, cavalry or artillery from toolbar, tree and roster context menus, including additions to existing fort garrisons.
+- Movable, resizable creation window with advanced choices, explicit parent selection, faction defaults, displayed/native tiers and available name suggestions.
+- Commander assignment, home state, volunteer/draft recruitment, contract, size, compatible weapon, training, combat experience, separate HQ/combat perks and perk progress.
+- Searchable verified towns and state filtering for independent HQs; percentage or raw starting supply values for combat units.
+- Review and confirmation, one-step undo/redo, transactional save with backup, and navigation to the new item.
+- Roster selection/editing stability, collapse controls, performance improvements, and the clearer Mass Rename / Naming Schemes label.
+
+## Verification and limits
+
+- 178 service baseline checks, 36 creation writer checks and 18 creation UI checks passed; 40 checks audited the game-written combined test save.
+- User confirmed the Union creations in game. Experience, training, assigned perks, perk progress, contracts, equipment and requested stock survived the resave.
+- Confederate creations and Richmond placement survived, but the game changed commanders and selected an available infantry perk. Fog of war prevented Confederate visual verification.
+- Creation supports save version **1.142**. Mapped but untested combinations require confirmation; malformed data, unresolved identities and unknown layouts remain unavailable. Verified town mapping covers 2 March 1861 through 19 June 1863.
+- The broad WPF regression run was interrupted by Windows clipboard access failure; it is not reported as a full pass.
+- New forts, Navy creation, new commanders, templates and the Army Builder interface are future work.
+
+See [Create tool mapping](CREATE_TOOL.md), [game test evidence](CREATE_TOOL_GAME_TEST.md)
+and [user guide](USER_GUIDE.md). The downloadable checksum accompanies the ZIP.
+
 # Aide-de-Camp 0.8.15 alpha
 
 Fixed the States roster after population and volunteer-target edits. Available volunteers and remaining deficits now use the same estimate as Edit Selected, including partial deficit reductions. Saved counters remain visible for comparison. Undo and redo restore the estimates; unavailable inputs are explicitly marked. Only population is written; the game recalculates the final recruitment pool.

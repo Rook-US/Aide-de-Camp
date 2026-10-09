@@ -24,9 +24,9 @@ public partial class MainWindow : Window
     private DisplayOobModel _displayModel = new();
     private readonly ObservableCollection<OobNode> _visibleCanvasNodes = new();
     private readonly List<OobNode> _roots = new();
-    private readonly ObservableCollection<RosterRow> _rosterRows = new();
+    private readonly BulkObservableCollection<RosterRow> _rosterRows = new();
     private readonly HashSet<CombatUnitNode> _selectedUnits = new();
-    private readonly ObservableCollection<ReadinessAlertItem> _alerts = new();
+    private readonly BulkObservableCollection<ReadinessAlertItem> _alerts = new();
 
     private CombatUnitNode? _selectedUnit;
     private OobNode? _selectedNode;
@@ -284,7 +284,8 @@ public partial class MainWindow : Window
         if (_category == CommandCategory.Unknown)
             _displayModel.UnattachedUnits.AddRange(_data.Units.Where(u => u.Nation == _nation && IsUnitInCurrentCommandCategory(u) && !_displayModel.CommandsById.ContainsKey(u.ParentId)));
         ApplyDisplayOrder();
-        RefreshOobCanvas();
+        if (_showRoster && !initialLoad) _oobVisibilityDirty = true;
+        else RefreshOobCanvas();
         RefreshRoster();
         RefreshAlerts();
     }
@@ -440,6 +441,7 @@ public partial class MainWindow : Window
 
     private void RefreshOobCanvas()
     {
+        _oobVisibilityDirty = false;
         _visibleCanvasNodes.Clear();
 
         LayoutDisplayModel();
@@ -769,7 +771,7 @@ public partial class MainWindow : Window
     {
         if (_data.SaveDirectory is null)
         {
-            MessageBox.Show("Load a save first so the naming designer can preview real units and Home State abbreviations.", "Naming Scheme", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Load a save first so the naming designer can preview real units and Home State abbreviations.", "Mass Rename / Naming Schemes", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var before = _editSession.Capture(_data.Units);
@@ -793,6 +795,7 @@ public partial class MainWindow : Window
         RosterViewPanel.Visibility = roster ? Visibility.Visible : Visibility.Collapsed;
         UpdateViewButtons();
         if (roster) RefreshRoster();
+        else if (_oobVisibilityDirty) RefreshOobCanvas();
     }
     private void UpdateViewButtons()
     {
@@ -1167,7 +1170,11 @@ public partial class MainWindow : Window
         var unitsToRefresh = changedUnits?.Distinct().ToList() ?? _data.Units.ToList();
         _data.RefreshGroupAggregates(changedUnits is null ? null : unitsToRefresh);
         foreach (var unit in unitsToRefresh) unit.RefreshDisplay();
-        if (relayout) RefreshOobCanvas();
+        if (relayout)
+        {
+            if (_showRoster) _oobVisibilityDirty = true;
+            else RefreshOobCanvas();
+        }
         RefreshRoster();
         RefreshAlerts();
     }
@@ -1179,14 +1186,15 @@ public partial class MainWindow : Window
         try
         {
         var search = SearchBox.Text?.Trim() ?? string.Empty;
-        _rosterRows.Clear();
+        var rows = new List<RosterRow>();
         var filterHq = FilterHeadquartersCheck?.IsChecked == true;
+        var subtreeMatches = string.IsNullOrWhiteSpace(search) ? null : BuildRosterSubtreeMatches(search);
 
         if (_rosterListing)
         {
             var roots = _displayModel.Roots.Select(r => r.Source);
             foreach (var root in roots)
-                AddRosterTreeRows(root, 0, search, false, filterHq);
+                AddRosterTreeRows(rows, root, 0, search, false, filterHq, subtreeMatches);
         }
         else
         {
@@ -1195,32 +1203,48 @@ public partial class MainWindow : Window
                 .Where(n => !filterHq || n is not GroupNode)
                 .Where(n => n is GroupNode g ? string.IsNullOrWhiteSpace(search) || g.Name.Contains(search, StringComparison.OrdinalIgnoreCase) : MatchesSearch((CombatUnitNode)n, search));
             foreach (var node in SortRosterNodes(nodes))
-                _rosterRows.Add(new RosterRow { Node = node, Depth = 0, LandMetrics = node is GroupNode hq ? hq.IsLandCommand : node is CombatUnitNode cu && CanEdit(cu) });
+                rows.Add(new RosterRow { Node = node, Depth = 0, LandMetrics = node is GroupNode hq ? hq.IsLandCommand : node is CombatUnitNode cu && CanEdit(cu) });
         }
 
         foreach (var unit in _displayModel.UnattachedUnits.Where(u => MatchesSearch(u, search)))
-            _rosterRows.Add(new RosterRow { Node = unit, Depth = 0, LandMetrics = false });
-        RestoreRosterSelection();
+            rows.Add(new RosterRow { Node = unit, Depth = 0, LandMetrics = false });
+        _rosterRows.ReplaceWith(rows);
         UpdateRosterModeButtons();
+        UpdateRosterCollapseButtons();
         }
         finally { _syncingRosterSelection = wasSyncing; }
         if (!wasSyncing) RestoreRosterSelection();
     }
 
-    private bool AddRosterTreeRows(OobNode node, int depth, string search, bool ancestorMatched, bool filterHq)
+    private void AddRosterTreeRows(List<RosterRow> rows, OobNode node, int depth, string search,
+        bool ancestorMatched, bool filterHq, HashSet<OobNode>? subtreeMatches)
     {
-        if (node is GroupNode categoryGroup && _commandClassifier.CategoryForGroup(categoryGroup, _data.Groups) != _category) return false;
-        if (node is CombatUnitNode categoryUnit && !IsUnitInCurrentCommandCategory(categoryUnit)) return false;
+        if (node is GroupNode categoryGroup && _commandClassifier.CategoryForGroup(categoryGroup, _data.Groups) != _category) return;
+        if (node is CombatUnitNode categoryUnit && !IsUnitInCurrentCommandCategory(categoryUnit)) return;
         var thisMatches = ancestorMatched || string.IsNullOrWhiteSpace(search) || node.Name.Contains(search, StringComparison.OrdinalIgnoreCase);
-        if (!thisMatches && !RosterSubtreeMatches(node, search)) return false;
-        if (!(filterHq && node is GroupNode)) _rosterRows.Add(new RosterRow { Node = node, Depth = depth, LandMetrics = node is GroupNode hq ? hq.IsLandCommand : node is CombatUnitNode cu && CanEdit(cu) });
+        if (!thisMatches && (subtreeMatches is null || !subtreeMatches.Contains(node))) return;
+        if (!(filterHq && node is GroupNode)) rows.Add(new RosterRow { Node = node, Depth = depth, LandMetrics = node is GroupNode hq ? hq.IsLandCommand : node is CombatUnitNode cu && CanEdit(cu) });
         if (node is GroupNode group && (group.IsExpanded || filterHq))
         {
             var children = _rosterSortKey == "OobOrder" ? OrderedChildren(group) : SortRosterNodes(group.Children);
             foreach (var child in children)
-                AddRosterTreeRows(child, depth + 1, search, thisMatches, filterHq);
+                AddRosterTreeRows(rows, child, depth + 1, search, thisMatches, filterHq, subtreeMatches);
         }
-        return true;
+    }
+
+    private HashSet<OobNode> BuildRosterSubtreeMatches(string search)
+    {
+        var matches = new HashSet<OobNode>();
+        bool Visit(OobNode node)
+        {
+            var found = node is CombatUnitNode unit ? MatchesSearch(unit, search) :
+                node.Name.Contains(search, StringComparison.OrdinalIgnoreCase);
+            foreach (var child in node.Children) found |= Visit(child);
+            if (found) matches.Add(node);
+            return found;
+        }
+        foreach (var root in _displayModel.Roots) Visit(root.Source);
+        return matches;
     }
 
     private static IEnumerable<OobNode> FlattenRosterNodes(OobNode node)
@@ -1265,13 +1289,6 @@ public partial class MainWindow : Window
             "Readiness" => null,
             _ => node.Name
         };
-    }
-
-    private static bool RosterSubtreeMatches(OobNode node, string search)
-    {
-        if (node is CombatUnitNode unit) return MatchesSearch(unit, search);
-        if (node.Name.Contains(search, StringComparison.OrdinalIgnoreCase)) return true;
-        return node.Children.Any(child => RosterSubtreeMatches(child, search));
     }
 
     private static bool MatchesSearch(CombatUnitNode unit, string search)
@@ -1329,6 +1346,7 @@ public partial class MainWindow : Window
     {
         if ((sender as FrameworkElement)?.DataContext is not RosterRow row || row.Group is not GroupNode group) return;
         group.IsExpanded = !group.IsExpanded;
+        _oobVisibilityDirty = true;
         RefreshRoster();
         e.Handled = true;
     }
@@ -1412,10 +1430,11 @@ public partial class MainWindow : Window
         var visibleIds = _rosterRows.Where(r => r.Unit is not null).Select(r => r.Unit!.UnitId).ToHashSet();
         var hiddenCount = _showRoster ? _selectedUnits.Count(u => !visibleIds.Contains(u.UnitId)) : 0;
         SelectionCountText.Text = $"{count:N0} selected" + (hiddenCount > 0 ? $" ({hiddenCount} hidden)" : "");
-        BatchEditButton.IsEnabled = ManagementWorkspace.Visibility == Visibility.Visible ? CanBatchManagement : count > 0 && _selectedUnits.All(CanEdit);
-        if(ManagementWorkspace.Visibility == Visibility.Visible)UpdateManagementSelectionUi();
+        if(ManagementWorkspace.Visibility == Visibility.Visible) { EditSuppliesButton.IsEnabled = false; UpdateManagementSelectionUi(); }
         else {
             EditSelectedButton.IsEnabled=count>0 && _selectedUnits.All(CanEdit) || count==0 && _selectedNode is GroupNode {IsLandCommand:true};
+            EditSuppliesButton.IsEnabled = count > 0 && _selectedUnits.All(u => CanEdit(u) &&
+                u.HasSupplyStock && u.PathLinkStatus == PathLinkStatus.Confirmed);
             ReselectBatchButton.IsEnabled=_workspace is "Armies" or "Garrisons";
             ClearSelectionButton.IsEnabled=count>0;
         }
@@ -1453,7 +1472,7 @@ public partial class MainWindow : Window
     {
         var all = _data.Units.Where(u => u.Nation == _nation && CanEdit(u) && IsUnitInCurrentCommandCategory(u) && u.ReadinessStatus != ReadinessLevel.Normal)
             .OrderByDescending(u => u.ReadinessStatus).ThenBy(u => u.StrengthPercent).ThenBy(u => u.Name).ToList();
-        _alerts.Clear(); foreach (var u in all) _alerts.Add(new ReadinessAlertItem(u));
+        _alerts.ReplaceWith(all.Select(u => new ReadinessAlertItem(u)));
         var yellow = all.Count(u => u.ReadinessStatus == ReadinessLevel.Yellow); var orange = all.Count(u => u.ReadinessStatus == ReadinessLevel.Orange); var red = all.Count(u => u.ReadinessStatus == ReadinessLevel.Red);
         YellowCountText.Text = $"● {yellow:N0}"; OrangeCountText.Text = $"● {orange:N0}"; RedCountText.Text = $"● {red:N0}";
         AlertSummaryText.Text = $"{all.Count:N0} flagged";
@@ -1546,6 +1565,9 @@ public partial class MainWindow : Window
     private void UndoWorkingEdit()
     {
         if (!_editSession.Undo(out var description)) return;
+        if (_selectedUnit is not null && !_data.Units.Contains(_selectedUnit) || _selectedNode is GroupNode removed && !_data.Groups.ContainsKey(removed.GroupId)) {
+            ClearBatchSelection(); ClearDetails(); _selectedUnit = null; _selectedNode = null;
+        }
         RebuildSide();
         if (_selectedUnit is not null) ShowUnit(_selectedUnit);
         else if (_selectedNode is GroupNode selectedGroup) ShowGroup(selectedGroup);
@@ -1584,7 +1606,7 @@ public partial class MainWindow : Window
     {
         _dirty = dirty;
         DirtyIndicator.Text = dirty ? "● UNSAVED" : string.Empty;
-        Title = "Aide-de-Camp 0.8.10" + (dirty ? " *" : "");
+        Title = "Aide-de-Camp 0.8.16 — Unit Creation Test Build" + (dirty ? " *" : "");
     }
 
     protected override void OnClosing(CancelEventArgs e)

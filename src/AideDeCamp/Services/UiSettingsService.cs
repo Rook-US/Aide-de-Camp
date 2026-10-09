@@ -42,6 +42,7 @@ public sealed class UiSettingsService
         new("oob.zoom.detail", "Show supplemental details at zoom", .95, .05, 3),
         new("roster.density.rowHeight", "Minimum roster row height", 28, 16, 160),
         new("roster.hierarchy.indent", "Hierarchy indent", 18, 0, 200),
+        new("supply.stock.rawValues", "Edit supply stock as saved values", 0, 0, 1, true),
         new("theme.text.scale", "Window text scale", 1, .65, 2)
     };
     public string SettingsPath { get; } = Path.Combine(AppPaths.Root, "Aide-de-Camp.UI.json");

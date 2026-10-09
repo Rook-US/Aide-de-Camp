@@ -4,6 +4,35 @@ Extract the entire Windows ZIP and run Aide-de-Camp.exe. Select your game instal
 
 Choose Union or Confederacy, then Armies, Garrisons, Navy, Officers, Weapons, or Nation. Double-click management rows to open their editor. The treasury edit control is beside the displayed balance.
 
+## Create Unit
+
+Use **Create Unit** in the toolbar or a tree/roster context menu. A selected HQ becomes
+the suggested parent; empty-space creation starts with an independent command.
+The popup can be moved and resized. Its three sections remain accessible in any order.
+
+Choose faction, branch and tier, then an explicit parent HQ. Only independent HQs
+choose towns: type part of a town name or filter by state. Combat units must attach
+to an HQ, including an existing fort command. Display tiers follow your scale setting;
+the saved native tier is shown alongside.
+
+Select an unused commander and, for combat units, home state, recruitment method,
+contract, size, compatible weapon and stock. Size starts at the configured maximum.
+Stock can be entered as percentages or raw values; 100% is one stock unit per man
+for each of the four categories. The game can replenish stock when time advances.
+Experience presets show the game's labels and stars. Perk progress is separate;
+an empty slot at 100% makes a perk choice available. HQs use their own four slots.
+
+**Advanced** opens all sections and allows browsing all weapons and combat perks.
+The review screen identifies mapped but untested choices for confirmation.
+Incompatible weapons, broken references and unknown save layouts still require
+correction. Only version 1.142 creation is implemented. The game may change assignments
+or choose available perks on the opposing faction, as observed in Test 15.
+
+**Review & Create** stages one undoable change and focuses the new item. **Save changes**
+writes it with a full backup. Ctrl+Z can also undo a creation after saving; save again
+to write its removal. Name suggestions affect presentation only. Templates and the
+future Army Builder are not yet included.
+
 ## Tree view
 
 Compact cards show the unit/command name, ranked commander, immediate parent, assigned manpower, casualties, and strength/transfer/contract alerts. HQ alerts include subordinate formations and missing commanders. Guns remain separate from manpower; assigned strength includes units in transfer. Zoom to 95% for supplemental metrics, weapons, contracts, and unit experience, or set your own detail threshold in UI settings. Details collapse below that threshold, releasing their layout space.
@@ -18,7 +47,7 @@ Saved preferences are retained. To adopt the new defaults from an older installa
 
 ## Batch editing
 
-Use Ctrl/Shift to select entries or cells, then **Edit Selected** (or **Batch Edit**). Combat units are grouped by type, with the full single-unit field set in each group. Weapons are filtered for that type. Strength previews show the configured maximum and estimated artillery guns. Changing a value selects its field automatically; restoring the original clears it. Blank mixed fields leave the units unchanged. Names can be shared intentionally, but a warning reminds you that unique names are easier to identify.
+Use Ctrl/Shift to select entries or cells, then **Edit Selected**. Combat units are grouped by type, with the full single-unit field set in each group. Weapons are filtered for that type. Strength previews show the configured maximum and estimated artillery guns. Changing a value selects its field automatically; restoring the original clears it. Blank mixed fields leave the units unchanged. Names can be shared intentionally, but a warning reminds you that unique names are easier to identify.
 
 One commit stages every group together. The footer shows how many units will change out of the selection; hover it for the old and new values. Ships, officers and weapons also show applicable fields, identifying subsets when a field is available for only some records. **Reselect batch** restores the last batch selection; it does not undo edits.
 

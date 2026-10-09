@@ -17,9 +17,13 @@ internal static partial class Program
         foreach(var workspace in new[]{"Officers","Weapons","Navy"}) {
             Open(workspace);
             if(workspace=="Navy"){typeof(MainWindow).GetMethod("ShipsInPort_Click",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(window,new object[]{window,new RoutedEventArgs()});Flush(window);}
-            var grid=(DataGrid)window.FindName("ManagementGrid");grid.SelectedItems.Clear();grid.SelectedItems.Add(grid.Items[0]);grid.SelectedItems.Add(grid.Items[1]);Flush(window);
+            var grid=(DataGrid)window.FindName("ManagementGrid");grid.SelectedItems.Clear();grid.SelectedItems.Add(grid.Items[0]);
+            // This case exercises mixed values. The latest paused save's first two
+            // ships have equal condition; choose a genuinely different second row.
+            var second = workspace == "Navy" ? grid.Items.Cast<object>().First(r => !Equals(r.GetType().GetProperty("Condition")!.GetValue(r), grid.Items[0].GetType().GetProperty("Condition")!.GetValue(grid.Items[0]))) : grid.Items[1];
+            grid.SelectedItems.Add(second);Flush(window);
             var ids=grid.SelectedItems.Cast<object>().Select(r=>(int)r.GetType().GetProperty("Id")!.GetValue(r)!).ToHashSet();
-            Check(((Button)window.FindName("BatchEditButton")).IsEnabled,workspace+" selection enables the fixed Batch Edit button");
+            Check(((Button)window.FindName("EditSelectedButton")).IsEnabled,workspace+" selection enables Edit Selected");
             string field=workspace=="Officers"?"Leadership":workspace=="Weapons"?"Stock on hand":"Condition";
             window.Dispatcher.BeginInvoke(new Action(()=>{
                 var dialog=app.Windows.OfType<ManagementEditWindow>().Single(w=>w.Owner==window);Flush(dialog);
@@ -39,7 +43,7 @@ internal static partial class Program
                 Shot(dialog,"UI-Batch-"+workspace+".png");
                 Descendants(dialog).OfType<Button>().Single(b=>b.Content?.ToString()=="Commit changes").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }),DispatcherPriority.ApplicationIdle);
-            ((Button)window.FindName("BatchEditButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Flush(window);
+            ((Button)window.FindName("EditSelectedButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Flush(window);
             var records=data.Management!.Records.Where(r=>r.Domain==workspace&&ids.Contains(r.Id)&&(workspace!="Weapons"||r.Side==1)).ToList();
             string key=workspace=="Officers"?"Leadership":workspace=="Weapons"?"Stock":"Condition";
             Check(records.Count==2&&records.All(r=>data.Management.Value(r.Fields.Single(f=>f.Key==key))==(workspace=="Weapons"?"4321":"88")),workspace+" batch stages the checked value on both selected records");

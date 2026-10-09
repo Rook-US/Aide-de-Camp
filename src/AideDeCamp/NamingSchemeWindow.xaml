@@ -1,7 +1,7 @@
 <Window x:Class="AideDeCamp.NamingSchemeWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Naming Scheme" Height="820" Width="1180" MinHeight="650" MinWidth="980"
+        Title="Mass Rename / Naming Schemes" Height="820" Width="1180" MinHeight="650" MinWidth="980"
         Background="#11161C" Foreground="#E8EDF2">
     <Window.Resources>
 

@@ -5,6 +5,531 @@ using AideDeCamp.Services;
 
 int checks = 0;
 void Check(bool test, string label) { if (!test) throw new Exception("FAILED: " + label); checks++; Console.WriteLine("PASS " + label); }
+if (args.Length == 3 && args[0] == "--creation-write") { try { await CreationChecks.Run(args[1], args[2], Check); Console.WriteLine($"Creation checks passed: {checks}"); } catch (Exception e) { Console.Error.WriteLine(e); Environment.ExitCode = 1; } return; }
+if (args.Length == 4 && args[0] == "--creation-batch") { try { await CreationBatch.Build(args[1], args[2], args[3]); } catch (Exception e) { Console.Error.WriteLine(e); Environment.ExitCode = 1; } return; }
+if (args.Length == 4 && args[0] == "--creation-resave") { try { await CreationBatch.AuditResave(args[1], args[2], args[3], Check); Console.WriteLine($"Game resave checks passed: {checks}"); } catch (Exception e) { Console.Error.WriteLine(e); Environment.ExitCode = 1; } return; }
+if (args.Length == 3 && args[0] == "--supply-write")
+{
+    var source = Path.GetFullPath(args[1]);
+    var temporary = Path.Combine(Path.GetTempPath(), "adc-supply-test-" + Guid.NewGuid().ToString("N"));
+    if (!temporary.StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase))
+        throw new InvalidOperationException("Temporary test copy escaped the system temp directory.");
+    Directory.CreateDirectory(temporary);
+    try
+    {
+        foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+        {
+            var relative = Path.GetRelativePath(source, file);
+            var destination = Path.Combine(temporary, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(file, destination);
+        }
+        var beforeFiles = Directory.EnumerateFiles(temporary, "*", SearchOption.TopDirectoryOnly)
+            .ToDictionary(file => Path.GetFileName(file)!, file => Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(file))));
+        using (var data = new GrandTacticianDataService())
+        {
+            await data.LoadAsync(temporary, args[2]);
+            var unit = data.Units.Single(u => u.Name == "ADC Test 1-1 Infantry" && u.CommanderId == 91);
+            var cavalry = data.Units.Single(u => u.Name == "ADC Test Division Cavalry" && u.CommanderId == 292);
+            var artillery = data.Units.Single(u => u.Name == "ADC Test 1st Artillery Battalion" && u.CommanderId == 48);
+            var selected = new[] { unit, cavalry, artillery };
+            Check(unit.PathLinkStatus == PathLinkStatus.Confirmed && unit.HasSupplyStock &&
+                unit.SupplyStockAt(0) == 500 && unit.SupplyStockAt(2) == 500 &&
+                cavalry.SupplyStockAt(0) == 300 && artillery.SupplyStockAt(1) == 30,
+                "Paused game resave exposes confirmed four-slot stock across three combat branches");
+            var malformed = SupplyStockEditPlan.Build(new[] { unit }, new Dictionary<int, string> { [0] = "NaN" }, false);
+            Check(!malformed.CanApply && malformed.Errors.Count > 0, "Nonfinite supply entry is rejected");
+            var overfilled = SupplyStockEditPlan.Build(new[] { unit }, new Dictionary<int, string> { [0] = "1001" }, true);
+            Check(!overfilled.CanApply && overfilled.Errors.Count > 0, "Raw stock above observed refill target is rejected");
+            var irrelevant = SupplyStockEditPlan.Build(new[] { unit }, new Dictionary<int, string> { [1] = "40", [3] = "40" }, false);
+            Check(!irrelevant.CanApply && irrelevant.Changes.Count == 0,
+                "Infantry's inactive artillery and forage slots cannot be edited by category controls");
+            unit.PathLinkStatus = PathLinkStatus.Ambiguous;
+            var ambiguous = SupplyStockEditPlan.Build(new[] { unit }, new Dictionary<int, string> { [0] = "40" }, false);
+            Check(!ambiguous.CanApply && ambiguous.Errors.Count > 0, "Ambiguous path identity blocks supply editing");
+            unit.PathLinkStatus = PathLinkStatus.Confirmed;
+            var plan = SupplyStockEditPlan.Build(selected,
+                new Dictionary<int, string> { [0] = "40", [1] = "45", [2] = "45", [3] = "35" }, false);
+            Check(plan.CanApply && plan.Changes.Count == 8,
+                "Percent input maps four categories to applicable infantry, cavalry, and artillery slots");
+            var session = new EditSession();
+            Check(session.Execute("Supply test", selected, plan.Apply) && unit.SupplyStockAt(0) == 400 &&
+                unit.SupplyStockAt(2) == 450 && cavalry.SupplyStockAt(3) == 210 &&
+                artillery.SupplyStockAt(1) == 27,
+                "Eight stock amounts across three branches stage as one transaction");
+            Check(session.Undo(out _) && unit.SupplyStockAt(0) == 500 && unit.SupplyStockAt(2) == 500 &&
+                cavalry.SupplyStockAt(3) == 300 && artillery.SupplyStockAt(1) == 30,
+                "One undo restores all three units' original stock amounts");
+            Check(session.Redo(out _) && unit.SupplyStockAt(0) == 400 && unit.SupplyStockAt(2) == 450 &&
+                cavalry.SupplyStockAt(3) == 210 && artillery.SupplyStockAt(1) == 27,
+                "One redo reapplies all four relevant supply categories");
+            var result = await data.SaveAsync();
+            Check(result.WroteFiles && result.BackupDirectory is not null &&
+                File.Exists(Path.Combine(result.BackupDirectory, "paths.dat")),
+                "Stock write uses ADC's full-save backup transaction");
+            var changedFiles = Directory.EnumerateFiles(temporary, "*", SearchOption.TopDirectoryOnly)
+                .Where(file => beforeFiles[Path.GetFileName(file)!] !=
+                    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(file))))
+                .Select(Path.GetFileName).ToArray();
+            Check(changedFiles.SequenceEqual(new[] { "paths.dat" }), "Stock-only edit leaves every other save file byte-exact");
+            var parsed = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(temporary, "paths.dat")));
+            var target = parsed.Single(r => r.Name == unit.Name && r.UnitType == 0 && r.CommanderId == 91);
+            var cavalryTarget = parsed.Single(r => r.Name == cavalry.Name && r.UnitType == 1 && r.CommanderId == 292);
+            var artilleryTarget = parsed.Single(r => r.Name == artillery.Name && r.UnitType == 2 && r.CommanderId == 48);
+            var original = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(result.BackupDirectory!, "paths.dat")))
+                .Single(r => r.Name == unit.Name && r.UnitType == 0 && r.CommanderId == 91);
+            Check(target.SupplyStock!.SequenceEqual(new[] { 400d, 500d, 450d, 500d }) &&
+                cavalryTarget.SupplyStock!.SequenceEqual(new[] { 240d, 300d, 270d, 210d }) &&
+                artilleryTarget.SupplyStock!.SequenceEqual(new[] { 30d, 27d, 27d, 21d }) &&
+                original.SupplyStock!.SequenceEqual(new[] { 500d, 500d, 500d, 500d }),
+                "Each branch changed only its relevant categories and the backup retained original values");
+        }
+        using (var reloaded = new GrandTacticianDataService())
+        {
+            await reloaded.LoadAsync(temporary, args[2]);
+            var unit = reloaded.Units.Single(u => u.Name == "ADC Test 1-1 Infantry" && u.CommanderId == 91);
+            var cavalry = reloaded.Units.Single(u => u.Name == "ADC Test Division Cavalry" && u.CommanderId == 292);
+            var artillery = reloaded.Units.Single(u => u.Name == "ADC Test 1st Artillery Battalion" && u.CommanderId == 48);
+            Check(unit.SupplyStockAt(0) == 400 && unit.SupplyStockAt(2) == 450 &&
+                cavalry.SupplyStockAt(3) == 210 && artillery.SupplyStockAt(1) == 27,
+                "All four saved supply categories reload through ADC's four-field path identities");
+        }
+        var editedPaths = File.ReadAllLines(Path.Combine(temporary, "paths.dat"));
+        var corruptedPaths = (string[])editedPaths.Clone();
+        var affected = PathRecordParser.Parse(editedPaths)
+            .Single(r => r.Name == "ADC Test 1-1 Infantry" && r.CommanderId == 91);
+        corruptedPaths[affected.SupplyStockLine!.Value] = "NaN";
+        File.WriteAllLines(Path.Combine(temporary, "paths.dat"), corruptedPaths);
+        using (var malformedSave = new GrandTacticianDataService())
+        {
+            await malformedSave.LoadAsync(temporary, args[2]);
+            var unit = malformedSave.Units.Single(u => u.Name == "ADC Test 1-1 Infantry" && u.CommanderId == 91);
+            Check(!SupplyStockEditPlan.Build(new[] { unit }, new Dictionary<int, string> { [0] = "40" }, false).CanApply,
+                "Malformed path stock cannot offer a supply write");
+        }
+        File.WriteAllLines(Path.Combine(temporary, "paths.dat"), editedPaths);
+        File.WriteAllText(Path.Combine(temporary, "version.dat"), "1.143");
+        using (var unsupportedSave = new GrandTacticianDataService())
+        {
+            await unsupportedSave.LoadAsync(temporary, args[2]);
+            var unit = unsupportedSave.Units.Single(u => u.Name == "ADC Test 1-1 Infantry" && u.CommanderId == 91);
+            Check(!SupplyStockEditPlan.Build(new[] { unit }, new Dictionary<int, string> { [0] = "40" }, false).CanApply,
+                "Unsupported save version cannot offer a supply write");
+        }
+        Console.WriteLine($"ALL {checks} SUPPLY WRITE CHECKS PASSED");
+    }
+    finally
+    {
+        if (Directory.Exists(temporary) && temporary.StartsWith(Path.GetFullPath(Path.GetTempPath()), StringComparison.OrdinalIgnoreCase))
+            Directory.Delete(temporary, true);
+    }
+    return;
+}
+if (args.Length == 2 && args[0] == "--town-locations")
+{
+    var lines = File.ReadAllLines(Path.Combine(args[1], "IIPsTowns.dat"));
+    var towns = TownLocationParser.Parse(lines);
+    Check(towns.Count > 0 && towns.All(t => !string.IsNullOrWhiteSpace(t.Name) &&
+          float.IsFinite(t.X) && float.IsFinite(t.Y) && float.IsFinite(t.Z)),
+          "Game-written town identities and world positions parse from complete counted sections");
+    using (var data = new GrandTacticianDataService())
+    {
+        await data.LoadAsync(args[1]);
+        Check(data.GetPlayableTowns().SequenceEqual(towns),
+              "ADC exposes only the same fully parsed saved towns and positions");
+        var mapped = data.GetPlayableTownsByState();
+        Check(mapped.Count == 103 && mapped.Any(t => t.Location.Name == "New York" && t.StateId == 27) &&
+              mapped.Any(t => t.Location.Name == "Washington" && t.StateId == 46),
+              "1861 texture gives verified state IDs to all 103 saved towns");
+        var maryland = data.GetPlayableTownsByState(17);
+        Check(maryland.Count > 0 && maryland.All(t => t.StateId == 17) &&
+              maryland.Any(t => t.Location.Name == "Baltimore"),
+              "Town state filter selects only verified matching locations");
+    }
+    var movedTown = towns.ToArray();
+    movedTown[0] = movedTown[0] with { X = movedTown[0].X + 1 };
+    var unmatched = false;
+    try { TownStateMap.Map1861(movedTown, new DateTime(1861, 7, 11)); }
+    catch (InvalidDataException) { unmatched = true; }
+    Check(unmatched, "Moved town cannot reuse a stale state assignment");
+    var unsupportedDate = false;
+    try { TownStateMap.Map1861(towns, new DateTime(1864, 1, 1)); }
+    catch (NotSupportedException) { unsupportedDate = true; }
+    Check(unsupportedDate, "Dates outside the inspected 1861 state texture are rejected");
+    var truncated = false;
+    try { TownLocationParser.Parse(lines[..^1]); } catch (InvalidDataException) { truncated = true; }
+    Check(truncated, "Truncated town and economy data cannot produce a location picker");
+    var invalidLocation = lines.ToArray();
+    // A malformed top-level count must fail before any town is offered.
+    invalidLocation[0] = int.MaxValue.ToString();
+    var badCount = false;
+    try { TownLocationParser.Parse(invalidLocation); } catch (InvalidDataException) { badCount = true; }
+    Check(badCount, "An impossible IIP count cannot expose guessed town positions");
+    var versionFixture = Path.Combine(Path.GetTempPath(), "adc-town-version-" + Guid.NewGuid().ToString("N"));
+    Directory.CreateDirectory(versionFixture);
+    try
+    {
+        foreach (var name in new[] { "groups.dat", "regiments.dat", "commanders.txt", "IIPsTowns.dat" })
+            File.Copy(Path.Combine(args[1], name), Path.Combine(versionFixture, name));
+        File.WriteAllText(Path.Combine(versionFixture, "version.dat"), "1.143\n");
+        using var unsupported = new GrandTacticianDataService();
+        await unsupported.LoadAsync(versionFixture);
+        var versionRejected = false;
+        try { unsupported.GetPlayableTowns(); } catch (NotSupportedException) { versionRejected = true; }
+        Check(versionRejected, "Unsupported save versions cannot offer town locations");
+    }
+    finally { Directory.Delete(versionFixture, true); }
+    Console.WriteLine($"ALL {checks} TOWN CHECKS PASSED ({towns.Count} verified town records)");
+    return;
+}
+if (args.Length == 3 && (args[0] == "--combined-creation-resave" || args[0] == "--expanded-creation-resave"))
+{
+    var save = args[1];
+    var expanded = args[0] == "--expanded-creation-resave";
+    using var gameWritten = new GrandTacticianDataService();
+    await gameWritten.LoadAsync(save, args[2]);
+    Check(File.ReadAllText(Path.Combine(save, "version.dat")).Trim() == "1.142",
+        "Combined game resave retains the observed 1.142 format");
+    var fort = gameWritten.GetExistingGarrisons().Single(item => item.FortName == "Fort Monroe");
+    var expected = new (string Name, int Commander, int Parent, int Branch, int Weapon, int Men, int State, double[]? Stock, int[]? Perk)[]
+    {
+        ("ADC Batch Fort Infantry", 92, fort.GroupId, 0, 14, 1000, 17, null, null),
+        ("ADC Batch Fort Cavalry", 93, fort.GroupId, 1, 25, 600, 31, null, null),
+        ("ADC Batch Cavalry Stock", 98, gameWritten.Groups.Values.Single(group => group.Name == "1st Infantry Division" && group.CommanderId == 1 && group.Nation == 0).GroupId, 1, 25, 600, 31, new double[] {300,600,300,300}, null),
+        ("ADC Batch Artillery Stock", 100, gameWritten.Groups.Values.Single(group => group.Name == "Division Artillery 2" && group.CommanderId == 46 && group.Nation == 0).GroupId, 2, 4, 60, 31, new double[] {60,30,30,60}, null),
+        ("ADC Batch New Zouave", 101, gameWritten.Groups.Values.Single(group => group.Name == "1-1 INFBDE" && group.CommanderId == 2 && group.Nation == 0).GroupId, 0, 14, 1000, 17, null, new int[] {2,0,0})
+    };
+    if (expanded) expected = expected.Concat(new (string Name, int Commander, int Parent, int Branch, int Weapon, int Men, int State, double[]? Stock, int[]? Perk)[]
+    {
+        ("ADC Batch New Cold Steel", 104, gameWritten.Groups.Values.Single(group => group.Name == "1st Infantry Division" && group.CommanderId == 1 && group.Nation == 0).GroupId, 1, 25, 600, 31, null, new int[] {9,0,0}),
+        ("ADC Batch New Experience", 102, gameWritten.Groups.Values.Single(group => group.Name == "1-1 INFBDE" && group.CommanderId == 2 && group.Nation == 0).GroupId, 0, 14, 1000, 17, null, null),
+        ("ADC Batch Fort Cavalry Stock", 105, fort.GroupId, 1, 25, 600, 31, new double[] {300,600,300,300}, null)
+    }).ToArray();
+    var paths = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(save, "paths.dat")));
+    Check(paths.Count == gameWritten.Groups.Count + gameWritten.Units.Count,
+        "Game wrote one complete path record for every live command and combat unit");
+    var regimentLines = File.ReadAllLines(Path.Combine(save, "regiments.dat"));
+    Check(regimentLines.Length == 1 + gameWritten.Units.Count * 39,
+        "Game wrote exact counted combat-record width after any ID renumbering");
+    foreach (var item in expected)
+    {
+        var unit = gameWritten.Units.Single(value => value.Name == item.Name && value.CommanderId == item.Commander);
+        Check(unit.ParentId == item.Parent && unit.UnitType == item.Branch && unit.WeaponId == item.Weapon &&
+              unit.TotalMenRaw == item.Men && unit.StateId == item.State && unit.Nation == 0,
+            item.Name + " survived game load with its intended parent and properties");
+        if (item.Name == "ADC Batch New Experience")
+        {
+            Check(Math.Abs(unit.ExperienceRaw - 50) < .01,
+                "New infantry retained 50% starting experience on paused resave");
+            Check(regimentLines.Skip(1 + unit.UnitId * 39 + 17).Take(3)
+                  .SequenceEqual(new[] { "-1", "0", "0" }),
+                "New infantry's separate empty perk slot has zero unspent perk progress");
+        }
+        var links = paths.Where(path => path.Name == item.Name && path.Abbreviation == item.Name &&
+            path.UnitType == item.Branch && path.CommanderId == item.Commander).ToList();
+        Check(links.Count == 1 && unit.PathLinkStatus == PathLinkStatus.Confirmed,
+            item.Name + " has one game-written four-field path link");
+        if (item.Stock is not null)
+            Check(links[0].SupplyStock is { Count: 4 } values && values.SequenceEqual(item.Stock),
+                item.Name + " retained the four requested stock amounts on paused resave");
+        if (item.Perk is not null)
+            Check(regimentLines.Skip(1 + unit.UnitId * 39 + 17).Take(3)
+                  .SequenceEqual(item.Perk.Select(value => value.ToString())),
+                item.Name + " retained its controlled perk triple");
+    }
+    var refs = File.ReadAllLines(Path.Combine(save, "armygrouprefs.dat"));
+    var groupCount = int.Parse(refs[0]);
+    var unitCount = int.Parse(refs[2 + 3 * groupCount]);
+    Check(groupCount == gameWritten.Groups.Count && unitCount == gameWritten.Units.Count &&
+          refs.Length == 3 + 3 * groupCount + 2 * unitCount,
+        "Game regenerated complete command and combat reference lists");
+    Console.WriteLine($"ALL {checks} COMBINED GAME RESAVE CHECKS PASSED");
+    return;
+}
+if (args.Length == 3 && (args[0] == "--combined-creation-input" || args[0] == "--expanded-creation-input"))
+{
+    var save = args[1];
+    var expanded = args[0] == "--expanded-creation-input";
+    using var candidate = new GrandTacticianDataService();
+    await candidate.LoadAsync(save, args[2]);
+    Check(File.ReadAllText(Path.Combine(save, "version.dat")).Trim() == "1.142",
+        "Combined creation test uses only the observed 1.142 format");
+    var fort = candidate.GetExistingGarrisons().Single(item => item.FortName == "Fort Monroe");
+    Check(fort.GroupId == 27 && Math.Abs(fort.X - 1709.999) < .02 && Math.Abs(fort.Z + 860.0001) < .02,
+        "Fort parent resolves through a unique saved fort reference and position");
+    var expected = new (string Name, int Commander, int Parent, int Branch, int Weapon, int Men, int State, double[]? Stock, int[]? Perk)[]
+    {
+        ("ADC Batch Fort Infantry", 92, fort.GroupId, 0, 14, 1000, 17, null, null),
+        ("ADC Batch Fort Cavalry", 93, fort.GroupId, 1, 25, 600, 31, null, null),
+        ("ADC Batch Cavalry Stock", 98, 88, 1, 25, 600, 31, new double[] {300,600,300,300}, null),
+        ("ADC Batch Artillery Stock", 100, 75, 2, 4, 60, 31, new double[] {60,30,30,60}, null),
+        ("ADC Batch New Zouave", 101, 71, 0, 14, 1000, 17, null, new int[] {2,0,0})
+    };
+    if (expanded) expected = expected.Concat(new (string Name, int Commander, int Parent, int Branch, int Weapon, int Men, int State, double[]? Stock, int[]? Perk)[]
+    {
+        ("ADC Batch New Cold Steel", 104, 88, 1, 25, 600, 31, null, new int[] {9,0,0}),
+        ("ADC Batch New Experience", 102, 71, 0, 14, 1000, 17, null, null),
+        ("ADC Batch Fort Cavalry Stock", 105, fort.GroupId, 1, 25, 600, 31, new double[] {300,600,300,300}, null)
+    }).ToArray();
+    var lines = File.ReadAllLines(Path.Combine(save, "regiments.dat"));
+    var count = int.Parse(lines[0]);
+    Check(lines.Length == 1 + 39 * count && count == candidate.Units.Count &&
+          Enumerable.Range(0, count).All(index => lines[1 + 39 * index] == index.ToString()),
+        "All fixed combat records have exact counted width and contiguous saved IDs");
+    var paths = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(save, "paths.dat")));
+    Check(paths.Count == candidate.Groups.Count + candidate.Units.Count - (expanded ? 5 : 3),
+        "Complete path file has the exact explicit new paths and game-import omissions");
+    foreach (var item in expected)
+    {
+        var unit = candidate.Units.Single(value => value.Name == item.Name && value.CommanderId == item.Commander);
+        Check(unit.ParentId == item.Parent && unit.UnitType == item.Branch && unit.WeaponId == item.Weapon &&
+              unit.TotalMenRaw == item.Men && unit.StateId == item.State && unit.Nation == 0,
+            item.Name + " has the declared saved parent, branch, equipment, strength, state, and faction");
+        if (item.Name == "ADC Batch New Experience")
+            Check(Math.Abs(unit.ExperienceRaw - 50) < .01,
+                "New infantry input has exactly 50% starting experience");
+        Check(candidate.WeaponOptions.Single(option => option.Id == item.Weapon).UnitType == item.Branch,
+            item.Name + " has branch-compatible configured equipment");
+        var matched = paths.Where(path => path.Name == item.Name && path.Abbreviation == item.Name &&
+            path.UnitType == item.Branch && path.CommanderId == item.Commander).ToList();
+        if (item.Stock is null)
+            Check(matched.Count == 0 && unit.PathLinkStatus == PathLinkStatus.Missing,
+                item.Name + " correctly awaits a game-generated path");
+        else
+            Check(matched.Count == 1 && unit.PathLinkStatus == PathLinkStatus.Confirmed &&
+                  matched[0].SupplyStock is { Count: 4 } values && values.SequenceEqual(item.Stock),
+                item.Name + " has one complete path with the declared starting stock");
+        if (item.Perk is not null)
+        {
+            var record = lines.Skip(1 + 39 * unit.UnitId).Take(39).ToArray();
+            Check(record.Skip(17).Take(3).SequenceEqual(item.Perk.Select(value => value.ToString())),
+                item.Name + " has the exact controlled perk triple");
+        }
+    }
+    Console.WriteLine($"ALL {checks} COMBINED CREATION INPUT CHECKS PASSED");
+    return;
+}
+if (args.Length == 3 && args[0] == "--new-unit-stock-resave")
+{
+    var save = args[1];
+    using var gameWritten = new GrandTacticianDataService();
+    await gameWritten.LoadAsync(save, args[2]);
+    Check(File.ReadAllText(Path.Combine(save, "version.dat")).Trim() == "1.142",
+        "New-unit stock game resave retains validated save version 1.142");
+    var unit = gameWritten.Units.Single(item => item.Name == "ADC Test New Half-Stock Infantry" && item.CommanderId == 97);
+    var parent = gameWritten.Groups[unit.ParentId];
+    Check(parent.Name == "1-1 INFBDE" && parent.CommanderId == 2 && parent.UnitTier == 14 &&
+          unit.UnitType == 0 && unit.UnitTier == 13 && unit.WeaponId == 14 && unit.TotalMenRaw == 1000 &&
+          unit.StateId == 17,
+        "Game retained the new infantry's parent, branch, weapon, strength, and home state");
+    var paths = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(save, "paths.dat")));
+    var links = paths.Where(record => record.Name == unit.Name && record.Abbreviation == unit.Name &&
+        record.UnitType == unit.UnitType && record.CommanderId == unit.CommanderId).ToList();
+    Check(paths.Count == gameWritten.Groups.Count + gameWritten.Units.Count && links.Count == 1 &&
+          unit.PathLinkStatus == PathLinkStatus.Confirmed,
+        "Game retained one fully parseable four-field path identity for every live unit");
+    Check(links[0].SupplyStock is { Count: 4 } stock && stock.SequenceEqual(new double[] { 500, 1000, 500, 1000 }),
+        "Paused game resave retained all four explicit starting stock amounts");
+    var refs = File.ReadAllLines(Path.Combine(save, "armygrouprefs.dat"));
+    var groupCount = int.Parse(refs[0]);
+    var unitCount = int.Parse(refs[2 + 3 * groupCount]);
+    Check(groupCount == gameWritten.Groups.Count && unitCount == gameWritten.Units.Count &&
+          refs.Length == 3 + 3 * groupCount + 2 * unitCount,
+        "Game regenerated complete army-group references with the new infantry");
+    Console.WriteLine($"ALL {checks} NEW-UNIT STOCK GAME RESAVE CHECKS PASSED");
+    return;
+}
+if (args.Length == 3 && args[0] == "--new-unit-stock-input")
+{
+    var save = args[1];
+    using var candidate = new GrandTacticianDataService();
+    await candidate.LoadAsync(save, args[2]);
+    Check(File.ReadAllText(Path.Combine(save, "version.dat")).Trim() == "1.142",
+        "New-unit stock probe is restricted to observed version 1.142");
+    var unit = candidate.Units.Single(item => item.Name == "ADC Test New Half-Stock Infantry" && item.CommanderId == 97);
+    var parent = candidate.Groups[unit.ParentId];
+    Check(parent.Name == "1-1 INFBDE" && parent.CommanderId == 2 && parent.UnitTier == 14 &&
+          unit.UnitType == 0 && unit.UnitTier == 13 && unit.WeaponId == 14 && unit.TotalMenRaw == 1000 &&
+          unit.StateId == 17,
+        "New infantry retains its explicit saved parent, branch, tier, weapon, strength, and home state");
+    Check(unit.PathLinkStatus == PathLinkStatus.Confirmed && unit.SupplyStockAt(0) == 500 &&
+          unit.SupplyStockAt(1) == 1000 && unit.SupplyStockAt(2) == 500 && unit.SupplyStockAt(3) == 1000,
+        "New infantry has a uniquely linked path with explicit half active ammunition/provisions stock");
+    var paths = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(save, "paths.dat")));
+    Check(paths.Count == candidate.Groups.Count + candidate.Units.Count &&
+          paths.Count(record => record.Name == unit.Name && record.Abbreviation == unit.Name &&
+              record.UnitType == 0 && record.CommanderId == 97) == 1,
+        "Entire expanded path file parses and the new unit has one four-field identity");
+    Console.WriteLine($"ALL {checks} NEW-UNIT STOCK INPUT CHECKS PASSED");
+    return;
+}
+if (args.Length == 3 && (args[0] == "--new-root-resave" || args[0] == "--philadelphia-root-resave"))
+{
+    var save = args[1];
+    var philadelphia = args[0] == "--philadelphia-root-resave";
+    var expectedName = philadelphia ? "ADC Test Philadelphia HQ" : "ADC Test New York HQ";
+    var townName = philadelphia ? "Philadelphia" : "New York";
+    var stateId = philadelphia ? 31 : 27;
+    var mapX = philadelphia ? 1711 : 1777;
+    var mapZ = philadelphia ? 585 : 475;
+    using var gameWritten = new GrandTacticianDataService();
+    await gameWritten.LoadAsync(save, args[2]);
+    Check(File.ReadAllText(Path.Combine(save, "version.dat")).Trim() == "1.142",
+        "New-root game resave retains validated save version 1.142");
+    var command = gameWritten.Groups.Values.Single(group => group.Name == expectedName &&
+        group.CommanderId == 96 && group.Nation == 0);
+    Check(command.ParentId == -1 && command.UnitTier == 16,
+        "New HQ remains an independent Union native-tier-16 command");
+    var battle = File.ReadAllLines(Path.Combine(save, "battledata.dat"));
+    var deploymentCount = int.Parse(battle[42]);
+    var tail = 43 + 15 * deploymentCount;
+    Check(tail < battle.Length && battle.Length == tail + 1 + 2 * int.Parse(battle[tail]),
+        "Game-written deployment count and economy tail fully parse");
+    var deployments = Enumerable.Range(0, deploymentCount).Select(index => battle.Skip(43 + 15 * index).Take(15).ToArray())
+        .Where(record => record[0] == command.GroupId.ToString() && record[13] == "True").ToList();
+    Check(deployments.Count == 1 &&
+          Math.Abs(double.Parse(deployments[0][2], System.Globalization.CultureInfo.InvariantCulture) - mapX) < .02 &&
+          Math.Abs(double.Parse(deployments[0][3], System.Globalization.CultureInfo.InvariantCulture) - mapZ) < .02,
+        $"New HQ has one game-written deployment at verified {townName} map coordinates");
+    var paths = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(save, "paths.dat")));
+    Check(paths.Count == gameWritten.Groups.Count + gameWritten.Units.Count &&
+          paths.Count(record => record.Name == command.RawName && record.CommanderId == 96 && record.UnitType == 16) == 1,
+        "Game generated one complete path record for the new root HQ");
+    var refs = File.ReadAllLines(Path.Combine(save, "armygrouprefs.dat"));
+    var groupCount = int.Parse(refs[0]);
+    var unitCount = int.Parse(refs[2 + 3 * groupCount]);
+    Check(groupCount == gameWritten.Groups.Count && unitCount == gameWritten.Units.Count &&
+          refs.Length == 3 + 3 * groupCount + 2 * unitCount,
+        "Game regenerated complete army-group references for the new command list");
+    Check(gameWritten.GetPlayableTownsByState(stateId).Any(town => town.Location.Name == townName &&
+          Math.Abs(town.Location.X - mapX) < .02 && Math.Abs(town.Location.Z + mapZ) < .02),
+        $"The deployed town still resolves to verified playable {townName} state {stateId}");
+    Console.WriteLine($"ALL {checks} NEW-ROOT GAME RESAVE CHECKS PASSED");
+    return;
+}
+if (args.Length == 3 && args[0] == "--creation-resave")
+{
+    var save = args[1];
+    using var gameWritten = new GrandTacticianDataService();
+    await gameWritten.LoadAsync(save, args[2]);
+    Check(File.ReadAllText(Path.Combine(save, "version.dat")).Trim() == "1.142",
+        "Game resave is the validated 1.142 format");
+    var division = gameWritten.Groups.Values.Single(g => g.Name == "1st Infantry Division" && g.Nation == 0 && g.CommanderId == 1);
+    var brigade = gameWritten.Groups.Values.Single(g => g.Name == "1-1 INFBDE" && g.CommanderId == 2);
+    var artillery = gameWritten.Groups.Values.Single(g => g.Name == "Division Artillery 2" && g.CommanderId == 46);
+    var fort = gameWritten.GetExistingGarrisons().Single(g => g.FortName == "Fort Monroe");
+    Check(brigade.ParentId == division.GroupId && artillery.ParentId == division.GroupId &&
+          artillery.UnitTier == 14 && fort.GroupId != artillery.GroupId,
+          "Game retained the requested command hierarchy and native artillery tier");
+    var expectedUnits = new (string Name, int Commander, int Parent, int Type, int Weapon, int Men, int State)[]
+    {
+        ("ADC Test Fort Monroe Artillery", 38, fort.GroupId, 2, 41, 60, 17),
+        ("ADC Test 1-1 Infantry", 91, brigade.GroupId, 0, 14, 1000, 17),
+        ("ADC Test Division Cavalry", 292, division.GroupId, 1, 25, 600, 31),
+        ("ADC Test 1st Artillery Battalion", 48, artillery.GroupId, 2, 4, 60, 31),
+        ("ADC Test 2nd Artillery Battalion", 49, artillery.GroupId, 2, 4, 60, 31),
+        ("ADC Test 3rd Artillery Battalion", 50, artillery.GroupId, 2, 4, 60, 31)
+    };
+    var pathRecords = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(save, "paths.dat")));
+    Check(pathRecords.Count == gameWritten.Groups.Count + gameWritten.Units.Count,
+        "Game generated exactly one fully parseable path record per live group and unit");
+    Check(expectedUnits.All(item => {
+        var stockRecords = pathRecords.Where(r => r.Name == item.Name && r.UnitType == item.Type &&
+            r.CommanderId == item.Commander).ToList();
+        return stockRecords.Count == 1 && stockRecords[0].SupplyStockLine is int &&
+            stockRecords[0].SupplyStock is { Count: 4 } stock &&
+            stock.All(value => double.IsFinite(value) && value >= 0);
+    }), "Game-written new combat units have four readable nonnegative stock amounts");
+    foreach (var item in expectedUnits)
+    {
+        var unit = gameWritten.Units.Single(u => u.Name == item.Name && u.CommanderId == item.Commander);
+        Check(unit.ParentId == item.Parent && unit.UnitType == item.Type && unit.WeaponId == item.Weapon &&
+              unit.TotalMenRaw == item.Men && unit.StateId == item.State && unit.PathLinkStatus == PathLinkStatus.Confirmed,
+              item.Name + " kept its saved parent, type, weapon, strength, home state, and path link");
+        var matches = pathRecords.Where(r => r.Name == item.Name && r.UnitType == item.Type &&
+            r.CommanderId == item.Commander).ToList();
+        Check(matches.Count == 1 && matches[0].Abbreviation == item.Name,
+              item.Name + " has one exact four-field game-written path identity");
+    }
+    Check(pathRecords.Count(r => r.Name == artillery.Name && r.CommanderId == artillery.CommanderId &&
+          r.UnitType == 14) == 1,
+          "Game generated a separate path identity for the new artillery command");
+    var refs = File.ReadAllLines(Path.Combine(save, "armygrouprefs.dat"));
+    var groupCount = int.Parse(refs[0]);
+    var unitCount = int.Parse(refs[2 + 3 * groupCount]);
+    Check(groupCount == gameWritten.Groups.Count && unitCount == gameWritten.Units.Count &&
+          refs.Length == 3 + 3 * groupCount + 2 * unitCount,
+          "Game regenerated complete army-group reference counts and record lengths");
+    Check(refs[3 + groupCount + 2 * artillery.GroupId] == "True" &&
+          expectedUnits.All(item => {
+              var id = gameWritten.Units.Single(u => u.Name == item.Name && u.CommanderId == item.Commander).UnitId;
+              return refs[4 + 3 * groupCount + 2 * id] == "True";
+          }), "Game assigned the observed commander-campaign flag to all new records");
+    Console.WriteLine($"ALL {checks} GAME RESAVE CHECKS PASSED");
+    return;
+}
+if (args.Length == 3 && args[0] == "--creation-experiment")
+{
+    var candidate = args[1];
+    var config = args[2];
+    var source = Path.Combine(Path.GetDirectoryName(candidate)!, "source-save");
+    using var experiment = new GrandTacticianDataService();
+    await experiment.LoadAsync(candidate, config);
+    Check(File.ReadAllText(Path.Combine(candidate, "version.dat")).Trim() == "1.142",
+        "Creation probe is restricted to the observed save version");
+    var sourceFiles = Directory.EnumerateFiles(source).Select(Path.GetFileName).OfType<string>().ToList();
+    var changedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        { "groups.dat", "regiments.dat", "scenario.dat" };
+    Check(sourceFiles.All(name => changedNames.Contains(name) ||
+          File.ReadAllBytes(Path.Combine(source, name)).SequenceEqual(File.ReadAllBytes(Path.Combine(candidate, name)))),
+          "Every unlisted companion file remains byte-identical to the source save");
+    foreach (var (name, width) in new[] { ("groups.dat", 32), ("regiments.dat", 39) })
+    {
+        var before = File.ReadAllLines(Path.Combine(source, name));
+        var after = File.ReadAllLines(Path.Combine(candidate, name));
+        var oldCount = int.Parse(before[0]);
+        var newCount = int.Parse(after[0]);
+        Check(before.Skip(1).Take(oldCount * width).SequenceEqual(after.Skip(1).Take(oldCount * width)) &&
+              after.Length == 1 + newCount * width,
+              name + " retains every original record and has exact counted width");
+    }
+    var requested = new (string Name, int Parent, int Type, int Weapon)[]
+    {
+        ("ADC Test Fort Monroe Artillery", 27, 2, 41),
+        ("ADC Test 1-1 Infantry", 71, 0, 14),
+        ("ADC Test Division Cavalry", 87, 1, 25),
+        ("ADC Test 1st Artillery Battalion", 287, 2, 4),
+        ("ADC Test 2nd Artillery Battalion", 287, 2, 4),
+        ("ADC Test 3rd Artillery Battalion", 287, 2, 4)
+    };
+    var expected = experiment.Groups.ContainsKey(287) ? requested : requested.Take(1).ToArray();
+    Check(experiment.GetExistingGarrisons().Any(g => g.GroupId == 27 && g.FortName == "Fort Monroe"),
+        "Fort Monroe still resolves through its saved fort reference");
+    Check(experiment.Groups[71].ParentId == 87 && experiment.Groups[87].ParentId == 70,
+        "Requested infantry brigade and division resolve through saved parent IDs");
+    Check(experiment.Groups.ContainsKey(287) == (expected.Length == 6) &&
+          (expected.Length == 1 || (experiment.Groups[287].ParentId == 87 && experiment.Groups[287].UnitTier == 14)),
+        "New artillery command has a valid native tier and intended division parent");
+    foreach (var item in expected)
+    {
+        var matches = experiment.Units.Where(u => u.Name == item.Name).ToList();
+        Check(matches.Count == 1 && matches[0].ParentId == item.Parent && matches[0].UnitType == item.Type &&
+              matches[0].WeaponId == item.Weapon && matches[0].PathLinkStatus == PathLinkStatus.Missing,
+              item.Name + " reloads in ADC with the requested identity and an explicitly missing new path state");
+        var weapon = experiment.WeaponOptions.Single(w => w.Id == item.Weapon);
+        Check(weapon.UnitType == item.Type, item.Name + " uses a compatible configured weapon");
+        var maximums = experiment.ReadUnitMaximums();
+        var category = item.Type switch { 0 => "Infantry", 1 => "Cavalry", 2 => "Artillery", _ => "" };
+        Check(matches[0].TotalMenRaw > 0 && matches[0].TotalMenRaw <= maximums[category] &&
+              experiment.StateOptions.Any(s => s.Id == matches[0].StateId),
+              item.Name + " has a configured strength and a known saved home-state ID");
+    }
+    var existingPathCount = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(candidate, "paths.dat"))).Count;
+    Check(existingPathCount == 807 && experiment.Units.Count + experiment.Groups.Count > existingPathCount,
+        "Probe deliberately leaves new path state to the game loader; this remains unverified until resave");
+    Console.WriteLine($"ALL {checks} CREATION EXPERIMENT CHECKS PASSED; GAME LOAD/RESAVE STILL REQUIRED");
+    return;
+}
 var temp = Path.Combine(Path.GetTempPath(), "gtcw-verification-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temp);
 try
 {
@@ -143,21 +668,73 @@ try
     commander[32] = "1"; commander[33] = "6"; commander[34] = "1861"; // Brigadier General promotion
     File.WriteAllText(Path.Combine(saveDir, "commanders.txt"), string.Join("\n", new[] { "1" }.Concat(commander)));
     File.WriteAllText(Path.Combine(saveDir, "scenario.dat"), "0\n0\n1\n7\n1861");
-    var pathLines = Enumerable.Repeat("0", 15).ToArray(); pathLines[0] = reg[1]; pathLines[3] = "7"; pathLines[14] = "1.5000";
+    var pathLines = new List<string> { "1", reg[1], reg[2], reg[4], reg[5], "0", "0", "0" };
+    void PathZeros(int count) { for (var i = 0; i < count; i++) pathLines.Add("0"); }
+    PathZeros(7); var pathTransferLine = pathLines.Count; pathLines.Add("1.5000");
+    PathZeros(6 + 2 + 5 + 4); pathLines.Add("0"); // active order types
+    PathZeros(4 + 1); pathLines.Add("0"); // order queue
+    PathZeros(4); pathLines.Add("0"); var supplyCountLine = pathLines.Count; pathLines.Add("0"); // ammunition and supply counts
+    PathZeros(7 + 5 + 3 + 6 + 3 + 7);
+    Check(PathRecordParser.Parse(pathLines).Single().TransferLine == pathTransferLine,
+        "Variable path parser locates transfer time inside a complete record");
+    var stockPath = pathLines.ToList(); stockPath[supplyCountLine] = "1";
+    stockPath.InsertRange(supplyCountLine + 1,
+        new[] { "0", "0", "0", "1", "0", "0", "1", "0", "500", "501", "502", "503" });
+    var parsedStock = PathRecordParser.Parse(stockPath).Single();
+    Check(parsedStock.SupplyStockLine == supplyCountLine + 9 &&
+          parsedStock.SupplyStock is { Count: 4 } stockValues &&
+          stockValues.SequenceEqual(new[] { 500d, 501d, 502d, 503d }),
+          "Variable path parser exposes four stock amounts and their current-record positions");
+    var invalidStockPath = stockPath.ToList(); invalidStockPath[parsedStock.SupplyStockLine!.Value] = "NaN";
+    var invalidStockBlocked = false;
+    try { PathRecordParser.Parse(invalidStockPath); }
+    catch (InvalidDataException) { invalidStockBlocked = true; }
+    Check(invalidStockBlocked, "Nonfinite supply stock is rejected before it can be displayed or edited");
+    var shiftedPath = pathLines.ToList(); shiftedPath[5] = "1"; shiftedPath.Insert(6, "covered");
+    Check(PathRecordParser.Parse(shiftedPath).Single().TransferLine == pathTransferLine + 1,
+        "Cover history shifts path transfer time without changing its identity");
+    bool truncatedPathBlocked = false;
+    try { PathRecordParser.Parse(pathLines.Take(pathLines.Count - 1).ToArray()); }
+    catch (InvalidDataException) { truncatedPathBlocked = true; }
+    Check(truncatedPathBlocked, "Truncated path record is rejected");
+    File.WriteAllText(Path.Combine(saveDir, "version.dat"), "1.142");
     var pathsPath = Path.Combine(saveDir, "paths.dat"); var originalPathsText = Mixed(pathLines); File.WriteAllText(pathsPath, originalPathsText);
+    File.WriteAllText(Path.Combine(saveDir, "version.dat"), "1.143");
+    using (var unsupportedPaths = new GrandTacticianDataService())
+    {
+        await unsupportedPaths.LoadAsync(saveDir);
+        Check(unsupportedPaths.Units.Single().PathLinkStatus == PathLinkStatus.NotAvailable,
+            "Unsupported save version cannot offer path writes");
+    }
+    File.WriteAllText(Path.Combine(saveDir, "version.dat"), "1.142");
+    File.WriteAllText(pathsPath, originalPathsText.Replace("5th Tree Label", "Different path abbreviation"));
+    using (var unresolvedPaths = new GrandTacticianDataService())
+    {
+        await unresolvedPaths.LoadAsync(saveDir);
+        var unresolvedUnit = unresolvedPaths.Units.Single();
+        Check(unresolvedUnit.PathLinkStatus == PathLinkStatus.Missing,
+            "A divergent saved abbreviation cannot be linked by name and commander alone");
+        unresolvedUnit.Name = "Unsafe rename";
+        bool unresolvedRenameBlocked = false;
+        try { await unresolvedPaths.SaveAsync(); }
+        catch (InvalidOperationException) { unresolvedRenameBlocked = true; }
+        Check(unresolvedRenameBlocked && File.ReadAllText(regimentPath) == originalRegText,
+            "Unresolved path identity blocks rename before any file is written");
+    }
+    File.WriteAllText(pathsPath, originalPathsText);
     using (var data = new GrandTacticianDataService())
     {
         await data.LoadAsync(saveDir); var savedUnit = data.Units.Single();
         Check(data.StateOptions.Count == 53 && data.StateOptions.Single(s => s.Id == 29) == new StateOption(29, "Ohio", "OH") && savedUnit.HomeStateName == "Indiana", "Canonical GTCW State_ID table resolves Ohio 29 and all listed locations");
         Check(savedUnit.CommanderDisplayName == "BG John Doe", "Commander rank is derived from commanders.txt promotion date");
-        Check(savedUnit.PathLinkStatus == PathLinkStatus.Confirmed, "Actual save parser confirms unique name / commander path link");
+        Check(savedUnit.PathLinkStatus == PathLinkStatus.Confirmed, "Actual save parser confirms unique four-field path link");
         Check(data.DisplayFingerprint == DisplayMetadataService.Fingerprint(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(regimentPath))), Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(groupPath)))), "Loaded display fingerprint matches exact file bytes");
         var noOp = await data.SaveAsync(); Check(!noOp.WroteFiles, "No-op save writes no files");
         savedUnit.Name = "6th Test Infantry"; var result = await data.SaveAsync(); data.MarkSavedStates();
-        Check(result.WroteFiles && result.PatchedFieldCount == 3 && File.Exists(Path.Combine(result.BackupDirectory!, "regiments.dat")), "Rename synchronizes Unit_Name and Override_Name and creates transaction backup");
+        Check(result.WroteFiles && result.PatchedFieldCount == 4 && File.Exists(Path.Combine(result.BackupDirectory!, "regiments.dat")), "Rename synchronizes both regiment and path names and creates transaction backup");
         Check(File.ReadAllText(regimentPath) == originalRegText.Replace("5th Test Infantry", "6th Test Infantry").Replace("5th Tree Label", "6th Test Infantry"), "Actual rename preserves every other raw regiment field and separator");
         Check(data.DisplayFingerprint == DisplayMetadataService.Fingerprint(Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(regimentPath))), Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(groupPath)))), "Post-save display fingerprint matches written bytes");
-        Check(File.ReadAllText(pathsPath) == originalPathsText.Replace("5th Test Infantry", "6th Test Infantry"), "Path name synchronizes without ETA normalization");
+        Check(File.ReadAllText(pathsPath) == originalPathsText.Replace("5th Test Infantry", "6th Test Infantry").Replace("5th Tree Label", "6th Test Infantry"), "Path name and abbreviation synchronize without ETA normalization");
         Check(File.ReadAllBytes(Path.Combine(result.BackupDirectory!, "groups.dat")).SequenceEqual(File.ReadAllBytes(groupPath)) && File.Exists(Path.Combine(result.BackupDirectory!, "commanders.txt")), "Backup includes unchanged save files");
         var beforeInvalid = File.ReadAllBytes(regimentPath);
         savedUnit.ExperienceRaw = double.NaN;
@@ -175,7 +752,7 @@ try
         var expectedHomeState = beforeHomeState.Replace("\r11\r\n", "\r22\r\n");
         Check(File.ReadAllLines(regimentPath)[32] == reg[31] && File.ReadAllLines(regimentPath)[30] == "22", "Home State edit preserves original Service_History");
         savedUnit.TransferDays = 4; await data.SaveAsync(); data.MarkSavedStates();
-        Check(File.ReadAllLines(regimentPath)[34] == "4" && File.ReadAllLines(pathsPath)[14] == "4", "ETA saves to both regiments and paths");
+        Check(File.ReadAllLines(regimentPath)[34] == "4" && File.ReadAllLines(pathsPath)[pathTransferLine] == "4", "ETA saves to both regiments and paths");
         var outside = File.ReadAllBytes(regimentPath).Concat(new byte[] { 10 }).ToArray(); File.WriteAllBytes(regimentPath, outside);
         bool metadataConflict = false; try { await data.SaveAsync(); } catch (IOException) { metadataConflict = true; }
         Check(metadataConflict, "Metadata-only save also blocks external file changes");
@@ -226,6 +803,40 @@ try
         await data.SaveAsync();
         Check(File.ReadAllLines(Path.Combine(nameRepairDir, "groups.dat"))[66] == "1st Brigade, 5th Division" && File.ReadAllLines(Path.Combine(nameRepairDir, "groups.dat"))[67] == "2", "Formation name and parent save together after command move");
     }
+    var fortDir = Path.Combine(temp, "fort-reference-rename"); Directory.CreateDirectory(fortDir);
+    File.WriteAllText(Path.Combine(fortDir, "regiments.dat"), "0");
+    File.WriteAllText(Path.Combine(fortDir, "commanders.txt"), "0");
+    var fortRecord = GroupRecord(27, "Ft. Monroe Garrison", -1, 14).Split('\n'); fortRecord[4] = "1113";
+    File.WriteAllText(Path.Combine(fortDir, "groups.dat"), "1\n" + string.Join("\n", fortRecord));
+    File.WriteAllText(Path.Combine(fortDir, "garrisonrefs.dat"), "1\nFort Monroe\n1709.999\n489.074\n-860.0001\nFt. Monroe Garrison\n\n15\n1113");
+    using (var data = new GrandTacticianDataService())
+    {
+        await data.LoadAsync(fortDir);
+        var linkedFort = data.GetExistingGarrisons().Single();
+        Check(linkedFort.FortName == "Fort Monroe" && linkedFort.GroupId == 27 && linkedFort.Nation == 0 &&
+              Math.Abs(linkedFort.X - 1709.999f) < .001f && Math.Abs(linkedFort.Z - -860.0001f) < .001f,
+              "Existing fort link resolves to its saved command ID and game position");
+        data.Groups[27].Name = "Renamed fort command";
+        bool fortRenameBlocked = false;
+        try { await data.SaveAsync(); } catch (InvalidOperationException e) { fortRenameBlocked = e.Message.Contains("garrisonrefs.dat"); }
+        Check(fortRenameBlocked && File.ReadAllLines(Path.Combine(fortDir, "groups.dat"))[2] == "Ft. Monroe Garrison", "Fort-linked HQ rename is rejected before changing the saved command or reference");
+    }
+    var validFortLines = File.ReadAllLines(Path.Combine(fortDir, "garrisonrefs.dat"));
+    var noLinkLines = (string[])validFortLines.Clone(); noLinkLines[5] = "none"; noLinkLines[6] = "none"; noLinkLines[7] = "-1"; noLinkLines[8] = "-1";
+    Check(ExistingGarrisonReferenceService.Resolve(noLinkLines, new Dictionary<int, GroupNode>()).Count == 0,
+          "An existing fort without an attached command is not an eligible garrison parent");
+    var malformedFortBlocked = false;
+    try { ExistingGarrisonReferenceService.Resolve(validFortLines[..^1], new Dictionary<int, GroupNode>()); }
+    catch (InvalidDataException) { malformedFortBlocked = true; }
+    Check(malformedFortBlocked, "Truncated fort references are rejected before any creation eligibility is offered");
+    var duplicateFortGroups = new Dictionary<int, GroupNode> {
+        [27] = new() { GroupId = 27, RawName = "Ft. Monroe Garrison", CommanderId = 1113, ParentId = -1, UnitTier = 14 },
+        [28] = new() { GroupId = 28, RawName = "Ft. Monroe Garrison", CommanderId = 1113, ParentId = -1, UnitTier = 14 }
+    };
+    var ambiguousFortBlocked = false;
+    try { ExistingGarrisonReferenceService.Resolve(validFortLines, duplicateFortGroups); }
+    catch (InvalidDataException) { ambiguousFortBlocked = true; }
+    Check(ambiguousFortBlocked, "Ambiguous saved fort-to-command links are rejected");
     var rehome = new CombatUnitNode { UnitId = 77, Nation = 0, ParentId = 1, StateId = 10, HomeStateName = "Ohio", UnitType = 0, UnitTier = 12, Name = "1st Indiana Infantry" };
     rule.WeaponExclude = ""; rule.NameExcludes = "";
     Check(naming.NameForRehomedUnit(rule, rehome, new[] { special, rehome }, _ => "OH").StartsWith("10th"), "Rehomed unit takes destination highest number plus one");
@@ -364,6 +975,14 @@ try
     // Optional read-only integration checks against each real save in a supplied campaign folder.
     if(args.Length>0) foreach(var realSave in Directory.EnumerateDirectories(args[0]).Where(d=>File.Exists(Path.Combine(d,"groups.dat")))) {
         using var campaign=new GrandTacticianDataService();await campaign.LoadAsync(realSave,null);
+        var parsedPaths = PathRecordParser.Parse(File.ReadAllLines(Path.Combine(realSave, "paths.dat")));
+        Check(parsedPaths.Count == campaign.Groups.Count + campaign.Units.Count &&
+              campaign.Units.Any(u => u.PathLinkStatus == PathLinkStatus.Confirmed) &&
+              campaign.Units.All(u => u.PathLinkStatus != PathLinkStatus.NotAvailable),
+              Path.GetFileName(realSave) + ": full 1.142 path parse and saved-field links remain available");
+        var existingForts = campaign.GetExistingGarrisons();
+        Check(existingForts.Select(f => f.GroupId).Distinct().Count() == existingForts.Count,
+              Path.GetFileName(realSave) + ": every linked fort has a distinct saved command");
         var files=new[]{"nations.dat","commanders.txt","ships.dat"}.Select(f=>Path.Combine(realSave,f)).ToArray();
         string Hash(string file)=>Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(file)));
         var hashes=files.Select(Hash).ToArray();

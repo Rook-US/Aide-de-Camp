@@ -13,6 +13,12 @@ public sealed class EditSession
 
     public bool CanUndo => _undo.Count > 0;
     public bool CanRedo => _redo.Count > 0;
+    public void ExecuteCreation(string description, Action apply, Action undo)
+    {
+        apply();
+        _undo.Push(new EditTransaction(description, new(), new(), UndoAction: undo, RedoAction: apply));
+        _redo.Clear();
+    }
     public bool ExecuteManagement(string description,ManagementDocument document,Action action)
     {
         var before=document.Capture();try{action();}catch{document.Restore(before);throw;}
@@ -66,11 +72,11 @@ public sealed class EditSession
     {
         description = string.Empty;
         if (_undo.Count == 0) return false;
-        var tx = _undo.Pop();
+        var tx = _undo.Peek();
         tx.UndoAction?.Invoke();
         foreach (var pair in tx.Before) pair.Value.ApplyTo(pair.Key);
         if (tx.GroupBefore is not null) foreach (var pair in tx.GroupBefore) pair.Value.ApplyTo(pair.Key);
-        _redo.Push(tx);
+        _undo.Pop(); _redo.Push(tx);
         description = tx.Description;
         return true;
     }
@@ -79,11 +85,11 @@ public sealed class EditSession
     {
         description = string.Empty;
         if (_redo.Count == 0) return false;
-        var tx = _redo.Pop();
+        var tx = _redo.Peek();
         tx.RedoAction?.Invoke();
         foreach (var pair in tx.After) pair.Value.ApplyTo(pair.Key);
         if (tx.GroupAfter is not null) foreach (var pair in tx.GroupAfter) pair.Value.ApplyTo(pair.Key);
-        _undo.Push(tx);
+        _redo.Pop(); _undo.Push(tx);
         description = tx.Description;
         return true;
     }
@@ -125,12 +131,17 @@ public sealed record UnitEditSnapshot(
     int TotalMenRaw,
     double CasualtyRatioRaw,
     double TransferTimeRaw,
-    string CommandPath)
+    string CommandPath,
+    double? Stock0,
+    double? Stock1,
+    double? Stock2,
+    double? Stock3)
 {
     public static UnitEditSnapshot Capture(CombatUnitNode unit) => new(
         unit.Name, unit.EditorOrder, unit.ParentId, unit.Nation, unit.StateId, unit.HomeStateName,
         unit.WeaponId, unit.WeaponName, unit.EnlistDateRaw, unit.EnlistDate, unit.ContractMonths, unit.ExperienceRaw,
-        unit.TotalMenRaw, unit.CasualtyRatioRaw, unit.TransferTimeRaw, unit.CommandPath);
+        unit.TotalMenRaw, unit.CasualtyRatioRaw, unit.TransferTimeRaw, unit.CommandPath,
+        unit.SupplyStockAt(0), unit.SupplyStockAt(1), unit.SupplyStockAt(2), unit.SupplyStockAt(3));
 
     public void ApplyTo(CombatUnitNode unit)
     {
@@ -150,6 +161,7 @@ public sealed record UnitEditSnapshot(
         unit.CasualtyRatioRaw = CasualtyRatioRaw;
         unit.TransferTimeRaw = TransferTimeRaw;
         unit.CommandPath = CommandPath;
+        unit.RestoreSupplyStock(Stock0, Stock1, Stock2, Stock3);
         unit.RefreshDisplay();
     }
 }

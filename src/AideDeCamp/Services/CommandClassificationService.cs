@@ -18,6 +18,7 @@ public sealed class CommandClassificationService
 {
     public CommandCategory ClassifyRoot(GroupNode group)
     {
+        if (group.SavedCategory is { } saved) return saved;
         var name = group.Name ?? string.Empty;
         if (group.UnitTier == 17 || ContainsAny(name, "fleet", "navy", "naval", "flotilla"))
             return CommandCategory.Fleet;

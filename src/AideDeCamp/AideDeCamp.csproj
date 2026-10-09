@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <Version>0.8.15</Version>
+    <Version>0.8.16</Version>
     <TargetFramework>net8.0-windows</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
@@ -13,4 +13,7 @@
     <Description>Save editor for Grand Tactician: The Civil War</Description>
     <PublishTrimmed>false</PublishTrimmed>
   </PropertyGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="Data\TownStates1861.csv" />
+  </ItemGroup>
 </Project>

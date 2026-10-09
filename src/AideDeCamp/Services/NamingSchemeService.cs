@@ -153,9 +153,9 @@ public sealed class NamingSchemeService
         return name;
     }
 
-    public string? ExclusionReason(NamingRule rule, CombatUnitNode unit)
+    public string? ExclusionReason(NamingRule rule, CombatUnitNode unit, int? currentNation = null)
     {
-        var nation = rule.Faction switch { NamingFaction.Union => 0, NamingFaction.Confederacy => 1, _ => CurrentNation };
+        var nation = rule.Faction switch { NamingFaction.Union => 0, NamingFaction.Confederacy => 1, _ => currentNation ?? CurrentNation };
         if (rule.Faction != NamingFaction.Both && unit.Nation != nation) return "Outside faction scope";
         if (!Matches(rule, unit)) return "Unit type / tier does not match";
         var category = Classify?.Invoke(unit) ?? CommandCategory.Unknown;
@@ -179,6 +179,28 @@ public sealed class NamingSchemeService
     public static bool Matches(NamingRule rule, CombatUnitNode unit) =>
         (!rule.UnitType.HasValue || rule.UnitType.Value == unit.UnitType) &&
         (!rule.UnitTier.HasValue || rule.UnitTier.Value == unit.UnitTier);
+
+    public IReadOnlyList<string> SuggestCreationNames(CombatUnitNode proposal, IEnumerable<CombatUnitNode> population,
+        IEnumerable<string> existingNames, Func<int, string> abbreviation, int count = 6)
+    {
+        var rules = Settings.Rules.Where(r => ExclusionReason(r, proposal, proposal.Nation) is null).ToArray();
+        var used = existingNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var suggestions = new List<string>(); var allUnits = population.ToArray();
+        foreach (var rule in rules) {
+            var skipped = ParseNumberSet(rule.SkippedNumbersText);
+            bool stateSpecific = rule.Tokens.Any(t => t.Kind == NamingTokenKind.HomeState);
+            foreach (var other in allUnits.Where(u => u.Nation == proposal.Nation && Matches(rule, u) && (!stateSpecific || u.StateId == proposal.StateId)))
+                if (TryReadExistingNumber(rule, other.Name, out var number)) skipped.Add(number);
+            for (int number = 1; number <= 100000 && suggestions.Count < count; number++) {
+                if (skipped.Contains(number)) continue;
+                var name = RenderName(rule, proposal, number, abbreviation(proposal.StateId));
+                if (!string.IsNullOrWhiteSpace(name) && !name.Any(char.IsControl) && used.Add(name)) suggestions.Add(name);
+                if (!rule.Tokens.Any(t => t.Kind == NamingTokenKind.Number) && rule.SpecialNames.Count == 0) break;
+            }
+            if (suggestions.Count >= count) break;
+        }
+        return suggestions;
+    }
 
     public static bool TryParseNumberDesignator(string? text, out int number)
     {

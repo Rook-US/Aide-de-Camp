@@ -12,7 +12,7 @@ public sealed record SaveResult(int ChangedUnitCount, int PatchedFieldCount, str
     public bool WroteFiles => !string.IsNullOrWhiteSpace(BackupDirectory);
 }
 
-public sealed class GrandTacticianDataService : IDisposable
+public sealed partial class GrandTacticianDataService : IDisposable
 {
     private const int RegimentFields = 39;
     private const int GroupFields = 32;
@@ -31,7 +31,7 @@ public sealed class GrandTacticianDataService : IDisposable
     private TextFileBuffer? _pathBuffer;
     private string? _tempExtractDir;
 
-    private static readonly string[] MonitoredSaveFiles = { "regiments.dat", "paths.dat", "groups.dat", "scenario.dat", "version.dat", "commanders.txt", "nations.dat", "ships.dat", "weapons.dat", "shiptype.dat" };
+    private static readonly string[] MonitoredSaveFiles = { "regiments.dat", "paths.dat", "groups.dat", "garrisonrefs.dat", "IIPsTowns.dat", "scenario.dat", "version.dat", "commanders.txt", "nations.dat", "ships.dat", "weapons.dat", "shiptype.dat", "battledata.dat", "armygrouprefs.dat" };
 
     // GTCW State_ID is a fixed game enumeration, not a campaign-local sequence.
     // Keep this independent of regiment service-history prose: many campaign units
@@ -68,8 +68,39 @@ public sealed class GrandTacticianDataService : IDisposable
     public string DisplayFingerprint => DisplayMetadataService.Fingerprint(_loadedFileHashes.GetValueOrDefault("regiments.dat", ""), _loadedFileHashes.GetValueOrDefault("groups.dat", ""));
     public ManagementDocument? Management { get; private set; }
     public NationProgression? Progression {get;private set;}
-    public bool HasUnsavedChanges => _units.Any(u => u.HasAnyUnsavedChanges) || _groups.Values.Any(g => g.HasUnsavedParent) || Management?.HasChanges==true;
+    public bool HasUnsavedChanges => HasCreationChanges || _units.Any(u => u.HasAnyUnsavedChanges) || _groups.Values.Any(g => g.HasUnsavedParent) || Management?.HasChanges==true;
     public int OrphanUnitCount => _units.Count(u => !_groups.ContainsKey(u.ParentId));
+
+    /// <summary>Fort-to-command links explicitly present in the loaded save.</summary>
+    public IReadOnlyList<ExistingGarrisonReferenceService.Link> GetExistingGarrisons()
+    {
+        if (SaveDirectory is null) throw new InvalidOperationException("No save loaded.");
+        EnsureFilesUnchanged();
+        var file = Path.Combine(SaveDirectory, "garrisonrefs.dat");
+        if (!File.Exists(file)) return Array.Empty<ExistingGarrisonReferenceService.Link>();
+        return ExistingGarrisonReferenceService.Resolve(TextFileBuffer.Read(file).Lines, _groups);
+    }
+
+    /// <summary>Saved campaign towns with game-written world positions; no state is inferred.</summary>
+    public IReadOnlyList<TownLocationParser.Town> GetPlayableTowns()
+    {
+        if (SaveDirectory is null) throw new InvalidOperationException("No save loaded.");
+        EnsureFilesUnchanged();
+        var version = Path.Combine(SaveDirectory, "version.dat");
+        if (!File.Exists(version) || File.ReadAllText(version).Trim() != "1.142")
+            throw new NotSupportedException("Town locations are mapped only for save version 1.142.");
+        var file = Path.Combine(SaveDirectory, "IIPsTowns.dat");
+        if (!File.Exists(file)) throw new InvalidDataException("IIPsTowns.dat is absent; town locations cannot be resolved.");
+        return TownLocationParser.Parse(TextFileBuffer.Read(file).Lines);
+    }
+
+    /// <summary>Verified 1861 scene-state mapping, with optional state filter.</summary>
+    public IReadOnlyList<TownStateMap.MappedTown> GetPlayableTownsByState(int? stateId = null)
+    {
+        if (GameDate is null) throw new NotSupportedException("The save has no validated campaign date.");
+        var towns = TownStateMap.Map1861(GetPlayableTowns(), GameDate.Value);
+        return stateId is null ? towns : towns.Where(town => town.StateId == stateId.Value).ToList();
+    }
 
     public async Task LoadAsync(string savePath, string? configDirectory = null)
     {
@@ -110,6 +141,7 @@ public sealed class GrandTacticianDataService : IDisposable
 
             ResolveDisplayNames();
             ResolveUnitContext();
+            ResolveSavedCommandCategories();
             var classifier = new CommandClassificationService();
             foreach (var group in _groups.Values) group.IsLandCommand = classifier.CategoryForGroup(group, _groups) is CommandCategory.FieldCommand or CommandCategory.Garrison;
             foreach (var unit in _units) unit.IsLandAsset = classifier.IsLandEditable(unit, _groups);
@@ -162,16 +194,41 @@ public sealed class GrandTacticianDataService : IDisposable
             var nameCheck = validator.ValidateName(group.Name);
             if (nameCheck.Severity == ValidationSeverity.Error) throw new InvalidDataException($"HQ {group.GroupId}: {nameCheck.Message}");
         }
-        if (changedUnits.Count == 0 && changedGroups.Count == 0 && Management?.HasChanges!=true) return new SaveResult(0, 0, null, Array.Empty<string>());
+        ValidateGarrisonRenameReferences(changedGroups);
+        if (changedUnits.Count == 0 && changedGroups.Count == 0 && Management?.HasChanges!=true && !HasCreationChanges) return new SaveResult(0, 0, null, Array.Empty<string>());
 
         if (changedUnits.Any(u => !new CommandClassificationService().IsLandEditable(u, _groups)))
             throw new InvalidOperationException("Naval and unclassified units are inspection-only; unsafe land edits cannot be saved.");
+        var unsafeRenames = changedUnits.Where(u => _pathBuffer is not null && u.HasUnsavedChange("Name") && u.PathLinkStatus != PathLinkStatus.Confirmed).ToList();
+        if (unsafeRenames.Count > 0)
+            throw new InvalidOperationException("Unit renames cannot be saved while their paths.dat identity is unresolved: " +
+                string.Join("; ", unsafeRenames.Take(12).Select(u => $"{u.Name}: {u.PathLinkMessage}")));
         var unsafeTransfers = changedUnits.Where(u => u.HasUnsavedChange("ETA") && u.PathLinkStatus != PathLinkStatus.Confirmed).ToList();
         if (unsafeTransfers.Count > 0)
         {
             var details = string.Join("\n", unsafeTransfers.Take(12).Select(u => $"• {u.Name}: {u.PathLinkMessage}"));
             if (unsafeTransfers.Count > 12) details += $"\n• …and {unsafeTransfers.Count - 12} more";
             throw new InvalidOperationException("Transfer ETA changes cannot be saved because one or more paths.dat links are not uniquely confirmed:\n\n" + details);
+        }
+        foreach (var unit in changedUnits.Where(HasSupplyStockChange))
+        {
+            if (_pathBuffer is null || unit.PathLinkStatus != PathLinkStatus.Confirmed ||
+                unit.PathSupplyStockLineIndex is not int stockLine || !unit.HasSupplyStock)
+                throw new InvalidOperationException($"{unit.Name}: supply stock cannot be saved without one fully confirmed 1.142 paths.dat record.");
+            if (unit.HasUnsavedChange("FieldStrength") || unit.HasUnsavedChange("Casualties"))
+                throw new InvalidOperationException($"{unit.Name}: save the strength change separately before editing supply stock; their combined game effect has not been validated.");
+            for (var slot = 0; slot < 4; slot++)
+            {
+                if (!unit.HasUnsavedChange($"Stock{slot}")) continue;
+                if (stockLine + slot >= _pathBuffer.Lines.Count)
+                    throw new InvalidDataException($"{unit.Name}: supply stock address is outside paths.dat.");
+                var amount = unit.SupplyStockAt(slot)!.Value;
+                var savedAmount = RequiredFiniteDouble(_pathBuffer.Lines[stockLine + slot], $"Saved stock {slot} for {unit.Name}");
+                var campaignTarget = (long)unit.TotalMenRaw + unit.WoundedRaw;
+                if (campaignTarget <= 0 || !double.IsFinite(amount) || amount < 0 ||
+                    amount > Math.Max(campaignTarget, savedAmount))
+                    throw new InvalidDataException($"{unit.Name}: stock {slot} must be between zero and the greater of its game refill target ({campaignTarget}) or its saved amount ({savedAmount}).");
+            }
         }
 
         ValidateGroupHierarchy();
@@ -182,6 +239,28 @@ public sealed class GrandTacticianDataService : IDisposable
     {
         foreach (var unit in _units) unit.MarkSavedState();
         foreach (var group in _groups.Values) group.MarkSavedState();
+    }
+
+    private void ValidateGarrisonRenameReferences(IEnumerable<GroupNode> changedGroups)
+    {
+        var renamed = changedGroups.Where(g => _groupBuffer!.Lines[g.GroupLineStart + 1] != g.Name).ToList();
+        if (renamed.Count == 0 || SaveDirectory is null) return;
+        var file = Path.Combine(SaveDirectory, "garrisonrefs.dat");
+        if (!File.Exists(file)) return;
+        var lines = TextFileBuffer.Read(file).Lines;
+        if (lines.Count == 0 || !int.TryParse(lines[0], NumberStyles.Integer, CultureInfo.InvariantCulture, out var count) || count < 0 || lines.Count < 1 + count * 8)
+            throw new InvalidDataException("garrisonrefs.dat has an invalid fort-reference count or record length; HQ renames are blocked.");
+        foreach (var group in renamed)
+        {
+            var savedName = _groupBuffer!.Lines[group.GroupLineStart + 1];
+            var commander = group.CommanderId.ToString(CultureInfo.InvariantCulture);
+            for (var i = 0; i < count; i++)
+            {
+                var start = 1 + i * 8;
+                if (lines[start + 4] == savedName && lines[start + 7] == commander)
+                    throw new InvalidOperationException($"Cannot rename HQ {group.GroupId} ({savedName}): garrisonrefs.dat links its fort to that saved name and commander. The fort and path references must be mapped and updated together before this rename is safe.");
+            }
+        }
     }
 
     private SaveResult SaveCore(IReadOnlyList<CombatUnitNode> changedUnits, IReadOnlyList<GroupNode> changedGroups)
@@ -208,13 +287,17 @@ public sealed class GrandTacticianDataService : IDisposable
 
         ValidateRegimentLines(regimentLines);
         ValidateGroupLines(groupLines);
-        if (pathLines is not null) ValidatePatchedPathLines(pathLines, changedUnits);
+        ValidateCreationWrite(regimentLines, groupLines, pathLines);
+        if (pathLines is not null && changedUnits.Any(u => u.HasUnsavedChange("ETA") || u.HasUnsavedChange("Name") || HasSupplyStockChange(u)))
+            ValidatePatchedPathLines(pathLines, changedUnits);
 
         var targets = new List<(string Name, TextFileBuffer Buffer, List<string> Lines)>();
         if(Management is not null) {targets.AddRange(Management.Targets());patchedFields+=Management.ChangedFields;}
-        if (!_regimentBuffer.Lines.SequenceEqual(regimentLines, StringComparer.Ordinal)) targets.Add(("regiments.dat", _regimentBuffer, regimentLines));
-        if (!_groupBuffer.Lines.SequenceEqual(groupLines, StringComparer.Ordinal)) targets.Add(("groups.dat", _groupBuffer, groupLines));
-        if (_pathBuffer is not null && pathLines is not null && !_pathBuffer.Lines.SequenceEqual(pathLines, StringComparer.Ordinal)) targets.Add(("paths.dat", _pathBuffer, pathLines));
+        if (DiffersFromSaved("regiments.dat", _regimentBuffer, regimentLines)) targets.Add(("regiments.dat", _regimentBuffer, regimentLines));
+        if (DiffersFromSaved("groups.dat", _groupBuffer, groupLines)) targets.Add(("groups.dat", _groupBuffer, groupLines));
+        if (_pathBuffer is not null && pathLines is not null && DiffersFromSaved("paths.dat", _pathBuffer, pathLines)) targets.Add(("paths.dat", _pathBuffer, pathLines));
+        foreach (var (name, buffer) in _creationCompanions) if (DiffersFromSaved(name, buffer, buffer.CloneLines())) targets.Add((name, buffer, buffer.CloneLines()));
+        if (HasCreationChanges) patchedFields += targets.Sum(t => Math.Abs(t.Lines.Count - _creationSaved.GetValueOrDefault(t.Name, t.Buffer.CloneLines()).Count));
         if (targets.Count == 0) return new SaveResult(changedUnits.Count, 0, null, warnings);
 
         EnsureFilesUnchanged();
@@ -285,6 +368,7 @@ public sealed class GrandTacticianDataService : IDisposable
         if (_pathBuffer is not null && pathLines is not null) _pathBuffer.ReplaceLines(pathLines);
         foreach (var pair in writtenHashes) _loadedFileHashes[pair.Key] = pair.Value;
         Management?.AcceptSaved();
+        AcceptCreationSave();
         return new SaveResult(changedUnits.Count + changedGroups.Count, patchedFields, backupDirectory, warnings);
     }
 
@@ -525,6 +609,7 @@ public sealed class GrandTacticianDataService : IDisposable
                 UnitTier = RequiredInt(lines[s + 24], $"regiments.dat unit {i} Unit_Tier"),
                 CommanderId = RequiredInt(lines[s + 5], $"regiments.dat unit {i} Commander_ID"),
                 TotalMenRaw = RequiredInt(lines[s + 6], $"regiments.dat unit {i} Total_Men"),
+                WoundedRaw = RequiredInt(lines[s + 7], $"regiments.dat unit {i} Wounded"),
                 CasualtyRatioRaw = RequiredFiniteDouble(lines[s + 9], $"regiments.dat unit {i} SickRatio"),
                 ExperienceRaw = RequiredFiniteDouble(lines[s + 10], $"regiments.dat unit {i} Experience"),
                 WeaponId = RequiredInt(lines[s + 13], $"regiments.dat unit {i} Weapon_ID"),
@@ -672,46 +757,60 @@ public sealed class GrandTacticianDataService : IDisposable
 
     private void MatchPathRecords(IReadOnlyList<string> pathLines)
     {
-        var lookup = new Dictionary<(string Name, int Commander), List<int>>();
-        for (var i = 0; i + 14 < pathLines.Count; i++)
+        IReadOnlyList<PathRecordParser.Record> records;
+        try
         {
-            if (string.IsNullOrWhiteSpace(pathLines[i])) continue;
-            if (!int.TryParse(pathLines[i + 3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var commander)) continue;
-            if (!double.TryParse(pathLines[i + 14], NumberStyles.Float, CultureInfo.InvariantCulture, out var transfer) || !double.IsFinite(transfer)) continue;
-            var key = (pathLines[i], commander);
-            if (!lookup.TryGetValue(key, out var list)) lookup[key] = list = new();
-            list.Add(i);
+            var versionPath = Path.Combine(SaveDirectory!, "version.dat");
+            if (!File.Exists(versionPath) || File.ReadAllText(versionPath).Trim() != "1.142")
+                throw new InvalidDataException("paths.dat record layout is validated only for save version 1.142.");
+            records = PathRecordParser.Parse(pathLines);
         }
+        catch (InvalidDataException error)
+        {
+            foreach (var unit in _units)
+            {
+                unit.PathNameLineIndex = null;
+                unit.PathTransferLineIndex = null;
+                unit.PathSupplyStockLineIndex = null;
+                unit.RestoreSupplyStock(null, null, null, null);
+                unit.PathLinkStatus = PathLinkStatus.NotAvailable;
+                unit.PathLinkMessage = error.Message;
+            }
+            return;
+        }
+        var lookup = records.GroupBy(r => (r.Name, r.Abbreviation, r.UnitType, r.CommanderId))
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         foreach (var unit in _units)
         {
             unit.PathNameLineIndex = null;
-            if (!lookup.TryGetValue((unit.Name, unit.CommanderId), out var candidates) || candidates.Count == 0)
+            unit.PathTransferLineIndex = null;
+            unit.PathSupplyStockLineIndex = null;
+            unit.RestoreSupplyStock(null, null, null, null);
+            var abbreviation = _regimentBuffer!.Lines[unit.RegimentLineStart + 2];
+            var savedName = _regimentBuffer!.Lines[unit.RegimentLineStart + 1];
+            if (!lookup.TryGetValue((savedName, abbreviation, unit.UnitType, unit.CommanderId), out var candidates) || candidates.Count == 0)
             {
                 unit.PathLinkStatus = PathLinkStatus.Missing;
-                unit.PathLinkMessage = "No matching paths.dat record was found by unit name and commander.";
+                unit.PathLinkMessage = "No matching paths.dat record was found by name, abbreviation, type, and commander.";
                 continue;
             }
             if (candidates.Count == 1)
             {
-                unit.PathNameLineIndex = candidates[0];
+                unit.PathNameLineIndex = candidates[0].Start;
+                unit.PathTransferLineIndex = candidates[0].TransferLine;
+                if (candidates[0].SupplyStockLine is int stockLine && candidates[0].SupplyStock is { Count: 4 } values &&
+                    values.All(value => value >= 0))
+                {
+                    unit.PathSupplyStockLineIndex = stockLine;
+                    unit.RestoreSupplyStock(values[0], values[1], values[2], values[3]);
+                }
                 unit.PathLinkStatus = PathLinkStatus.Confirmed;
-                unit.PathLinkMessage = "Unique paths.dat record confirmed by unit name and commander.";
+                unit.PathLinkMessage = "Unique paths.dat record confirmed by all four saved identity fields.";
                 continue;
             }
-
-            var exactTransferMatches = candidates.Where(i => Math.Abs(RequiredFiniteDouble(pathLines[i + 14], "paths.dat Transfer_Time") - unit.TransferTimeRaw) <= 0.000001).ToList();
-            if (exactTransferMatches.Count == 1)
-            {
-                unit.PathNameLineIndex = exactTransferMatches[0];
-                unit.PathLinkStatus = PathLinkStatus.Confirmed;
-                unit.PathLinkMessage = "Unique paths.dat record confirmed by name, commander, and matching transfer time.";
-            }
-            else
-            {
-                unit.PathLinkStatus = PathLinkStatus.Ambiguous;
-                unit.PathLinkMessage = $"{candidates.Count} paths.dat candidates match this unit; the editor will not guess which one to write.";
-            }
+            unit.PathLinkStatus = PathLinkStatus.Ambiguous;
+            unit.PathLinkMessage = $"{candidates.Count} paths.dat records share all four identity fields; the editor will not guess which one to write.";
         }
     }
 
@@ -820,23 +919,41 @@ public sealed class GrandTacticianDataService : IDisposable
         }
     }
 
+    private static bool HasSupplyStockChange(CombatUnitNode unit) =>
+        Enumerable.Range(0, 4).Any(slot => unit.HasUnsavedChange($"Stock{slot}"));
+
     private static int PatchPath(List<string> lines, CombatUnitNode unit, List<string> warnings)
     {
         var needsName = unit.HasUnsavedChange("Name");
         var needsEta = unit.HasUnsavedChange("ETA");
-        if (!needsName && !needsEta) return 0;
-        if (unit.PathLinkStatus != PathLinkStatus.Confirmed || unit.PathNameLineIndex is not int n)
+        var needsStock = HasSupplyStockChange(unit);
+        if (!needsName && !needsEta && !needsStock) return 0;
+        if (unit.PathLinkStatus != PathLinkStatus.Confirmed || unit.PathNameLineIndex is not int n || unit.PathTransferLineIndex is not int transferLine)
         {
             if (needsName) warnings.Add($"{unit.Name}: path name was not synchronized because its paths.dat link is {unit.PathLinkStatus}.");
+            if (needsStock) throw new InvalidDataException($"{unit.Name}: supply stock path identity is not confirmed.");
             return 0;
         }
-        if (n < 0 || n + 14 >= lines.Count) throw new InvalidDataException($"Confirmed paths.dat link for {unit.Name} is outside the file bounds.");
+        if (n < 0 || n + 1 >= lines.Count || transferLine <= n || transferLine >= lines.Count)
+            throw new InvalidDataException($"Confirmed paths.dat link for {unit.Name} is outside the file bounds.");
         var patched = 0;
         if (needsName && lines[n] != unit.Name) { EnsureLineSafe(unit.Name, $"Path unit name for {unit.UnitId}"); lines[n] = unit.Name; patched++; }
+        if (needsName && lines[n + 1] != unit.Name) { lines[n + 1] = unit.Name; patched++; }
         if (needsEta)
         {
             var value = unit.TransferTimeRaw.ToString("0.###############", CultureInfo.InvariantCulture);
-            if (lines[n + 14] != value) { lines[n + 14] = value; patched++; }
+            if (lines[transferLine] != value) { lines[transferLine] = value; patched++; }
+        }
+        if (needsStock)
+        {
+            if (unit.PathSupplyStockLineIndex is not int stockLine || stockLine < 0 || stockLine + 3 >= lines.Count)
+                throw new InvalidDataException($"{unit.Name}: supply stock fields are outside paths.dat.");
+            for (var slot = 0; slot < 4; slot++)
+            {
+                if (!unit.HasUnsavedChange($"Stock{slot}")) continue;
+                var value = unit.SupplyStockAt(slot)!.Value.ToString("R", CultureInfo.InvariantCulture);
+                if (lines[stockLine + slot] != value) { lines[stockLine + slot] = value; patched++; }
+            }
         }
         return patched;
     }
@@ -864,12 +981,28 @@ public sealed class GrandTacticianDataService : IDisposable
 
     private static void ValidatePatchedPathLines(IReadOnlyList<string> lines, IEnumerable<CombatUnitNode> changedUnits)
     {
-        foreach (var unit in changedUnits.Where(u => (u.HasUnsavedChange("ETA") || u.HasUnsavedChange("Name")) && u.PathLinkStatus == PathLinkStatus.Confirmed))
+        var records = PathRecordParser.Parse(lines);
+        foreach (var unit in changedUnits.Where(u => (u.HasUnsavedChange("ETA") || u.HasUnsavedChange("Name") || HasSupplyStockChange(u)) && u.PathLinkStatus == PathLinkStatus.Confirmed))
         {
-            if (unit.PathNameLineIndex is not int n || n < 0 || n + 14 >= lines.Count)
+            var matches = records.Where(r => r.Start == unit.PathNameLineIndex && r.TransferLine == unit.PathTransferLineIndex).ToList();
+            if (matches.Count != 1)
                 throw new InvalidDataException($"Generated paths.dat link for {unit.Name} is invalid.");
-            EnsureLineSafe(lines[n], $"Generated path name for {unit.Name}");
-            _ = RequiredFiniteDouble(lines[n + 14], $"Generated paths.dat Transfer_Time for {unit.Name}");
+            var record = matches[0];
+            if (record.Name != unit.Name || (unit.HasUnsavedChange("Name") && record.Abbreviation != unit.Name) || record.UnitType != unit.UnitType || record.CommanderId != unit.CommanderId)
+                throw new InvalidDataException($"Generated paths.dat identity for {unit.Name} does not match its regiment.");
+            EnsureLineSafe(record.Name, $"Generated path name for {unit.Name}");
+            _ = RequiredFiniteDouble(lines[record.TransferLine], $"Generated paths.dat Transfer_Time for {unit.Name}");
+            if (HasSupplyStockChange(unit))
+            {
+                if (record.SupplyStockLine != unit.PathSupplyStockLineIndex || record.SupplyStock is not { Count: 4 })
+                    throw new InvalidDataException($"Generated paths.dat supply stock link for {unit.Name} is invalid.");
+                for (var slot = 0; slot < 4; slot++)
+                {
+                    var amount = record.SupplyStock[slot];
+                    if (amount < 0 || amount != unit.SupplyStockAt(slot))
+                        throw new InvalidDataException($"Generated paths.dat supply stock {slot} for {unit.Name} does not match the staged edit.");
+                }
+            }
         }
     }
 
@@ -1020,6 +1153,7 @@ public sealed class GrandTacticianDataService : IDisposable
 
     private void Reset()
     {
+        ResetCreation();
         _commanders.Clear();
         _commanderRanks.Clear();
         _weaponNames.Clear();

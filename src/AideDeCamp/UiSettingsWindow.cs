@@ -43,7 +43,7 @@ public sealed class UiSettingsWindow : Window
             var reset = new Button { Content = "Reset section", HorizontalAlignment = HorizontalAlignment.Right };
             reset.Click += (_, _) => { _settings.Reset(section.Key); Rebuild(); Changed(); };
             DockPanel.SetDock(reset, Dock.Right); header.Children.Add(reset);
-            header.Children.Add(new TextBlock { Text = section.Key switch { "oob.presentation" => "Organization labels (native IDs preserved)", "oob.cards" => "Unit and HQ cards", "oob.natoCounters" => "Floating NATO counters", "oob.spacing" => "Formation spacing", "oob.connectors" => "Hierarchy connectors", "oob.zoom" => "Zoom detail", "roster.density" => "Roster readability", "roster.hierarchy" => "Roster hierarchy", "theme.text" => "Application text", _ => section.Key }, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center }); _content.Children.Add(header);
+            header.Children.Add(new TextBlock { Text = section.Key switch { "oob.presentation" => "Organization labels (native IDs preserved)", "oob.cards" => "Unit and HQ cards", "oob.natoCounters" => "Floating NATO counters", "oob.spacing" => "Formation spacing", "oob.connectors" => "Hierarchy connectors", "oob.zoom" => "Zoom detail", "roster.density" => "Roster readability", "roster.hierarchy" => "Roster hierarchy", "supply.stock" => "Supply stock editing", "theme.text" => "Application text", _ => section.Key }, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center }); _content.Children.Add(header);
             foreach (var p in section)
             {
                 var row = new Grid { Margin = new Thickness(0,3,0,3) };

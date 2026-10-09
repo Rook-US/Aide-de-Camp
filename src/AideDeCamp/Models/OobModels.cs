@@ -85,6 +85,7 @@ public sealed class GroupNode : OobNode
 
     public override bool IsGroup => true;
     public bool IsLandCommand { get; set; } = true;
+    public CommandCategory? SavedCategory { get; set; }
     public int GroupId { get; init; }
     public int GroupLineStart { get; set; }
     public string RawName { get; set; } = string.Empty;
@@ -356,6 +357,34 @@ public sealed class CombatUnitNode : OobNode
     public double TransferTimeRaw { get; set; }
     public int RegimentLineStart { get; set; }
     public int? PathNameLineIndex { get; set; }
+    public int? PathTransferLineIndex { get; set; }
+    public int? PathSupplyStockLineIndex { get; set; }
+    public int WoundedRaw { get; set; }
+    private double[]? _supplyStock;
+    public bool HasSupplyStock => _supplyStock is { Length: 4 };
+    public double? SupplyStockAt(int slot) => slot is >= 0 and < 4 && _supplyStock is { Length: 4 }
+        ? _supplyStock[slot] : null;
+    public void SetSupplyStock(int slot, double value)
+    {
+        if (slot is < 0 or > 3 || _supplyStock is not { Length: 4 } || !double.IsFinite(value) || value < 0)
+            throw new ArgumentOutOfRangeException(nameof(value), "A confirmed four-slot stock record and a finite nonnegative amount are required.");
+        _supplyStock[slot] = value;
+        OnPropertyChanged(nameof(HasSupplyStock));
+    }
+    public void RestoreSupplyStock(double? smallArms, double? artillery, double? provisions, double? forage)
+    {
+        if (smallArms is null && artillery is null && provisions is null && forage is null)
+        {
+            _supplyStock = null;
+            OnPropertyChanged(nameof(HasSupplyStock));
+            return;
+        }
+        var values = new[] { smallArms, artillery, provisions, forage };
+        if (values.Any(v => v is null || !double.IsFinite(v.Value) || v.Value < 0))
+            throw new ArgumentOutOfRangeException(nameof(values), "All four stock amounts must be finite and nonnegative.");
+        _supplyStock = values.Select(v => v!.Value).ToArray();
+        OnPropertyChanged(nameof(HasSupplyStock));
+    }
     public PathLinkStatus PathLinkStatus { get; set; } = PathLinkStatus.NotAvailable;
     public string PathLinkMessage { get; set; } = "paths.dat is not available for this save.";
     public int ConfiguredMaxStrength { get; set; } = 2000;
@@ -461,7 +490,8 @@ public sealed class CombatUnitNode : OobNode
 
     public static readonly string[] TrackedEditFields =
     {
-        "Name", "HomeState", "FieldStrength", "Casualties", "Weapon", "EnlistDate", "Contract", "ContractRemaining", "Experience", "ETA", "Parent"
+        "Name", "HomeState", "FieldStrength", "Casualties", "Weapon", "EnlistDate", "Contract", "ContractRemaining", "Experience", "ETA", "Parent",
+        "Stock0", "Stock1", "Stock2", "Stock3"
     };
 
     public bool HasUnsavedChange(string field) => GetEditState(field) == EditState.Unsaved;
@@ -481,6 +511,10 @@ public sealed class CombatUnitNode : OobNode
         "Experience" => ExperienceRaw.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
         "ETA" => TransferTimeRaw.ToString("R", System.Globalization.CultureInfo.InvariantCulture),
         "Parent" => $"{ParentId}|{CommandPath}",
+        "Stock0" => SupplyStockAt(0)?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "—",
+        "Stock1" => SupplyStockAt(1)?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "—",
+        "Stock2" => SupplyStockAt(2)?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "—",
+        "Stock3" => SupplyStockAt(3)?.ToString("R", System.Globalization.CultureInfo.InvariantCulture) ?? "—",
         _ => string.Empty
     };
 

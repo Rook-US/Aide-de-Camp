@@ -27,7 +27,6 @@ public partial class MainWindow
         int count=SelectedManagementRows().Count;
         SelectionCountText.Text=board?(_selectedBoardTag is null?"0 selected":"1 selected"):$"{count:N0} selected";
         EditSelectedButton.IsEnabled=!_data.IsReadOnlySave && (board?_selectedBoardTag is not null:count>0);
-        BatchEditButton.IsEnabled=CanBatchManagement;
         ReselectBatchButton.IsEnabled=_workspace is "Officers" or "Weapons" or "Navy";
         ClearSelectionButton.IsEnabled=board?_selectedBoardTag is not null:count>0;
     }

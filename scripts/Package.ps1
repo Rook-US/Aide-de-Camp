@@ -17,7 +17,9 @@ foreach ($name in @('README.md')) {
 }
 $docs=Join-Path $stage 'docs'
 New-Item -ItemType Directory -Path $docs -Force | Out-Null
-Copy-Item -LiteralPath (Join-Path $repoRoot 'docs/USER_GUIDE.md') -Destination (Join-Path $docs 'USER_GUIDE.md')
+foreach ($guide in @('USER_GUIDE.md', 'KNOWN_LIMITS.md', 'CREATE_TOOL.md', 'CREATE_TOOL_GAME_TEST.md', 'RELEASE_NOTES.md')) {
+    Copy-Item -LiteralPath (Join-Path $repoRoot "docs/$guide") -Destination (Join-Path $docs $guide)
+}
 $cache = if ($env:NUGET_PACKAGES) { $env:NUGET_PACKAGES } else { Join-Path $env:USERPROFILE '.nuget/packages' }
 $licenses = Join-Path $stage 'licenses'
 New-Item -ItemType Directory -Path $licenses -Force | Out-Null

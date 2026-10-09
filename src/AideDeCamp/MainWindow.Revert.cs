@@ -11,6 +11,10 @@ public partial class MainWindow
     private Dictionary<CombatUnitNode, UnitEditSnapshot> _loadedSnapshots = new();
     private void RosterContextOpening(object sender, ContextMenuEventArgs e)
     {
+        DependencyObject? createHit = e.OriginalSource as DependencyObject;
+        while (createHit is not null && createHit is not DataGridRow)
+            createHit = createHit is Visual ? VisualTreeHelper.GetParent(createHit) : LogicalTreeHelper.GetParent(createHit);
+        _creationRosterContext = (createHit as DataGridRow)?.DataContext is RosterRow creationRow ? (OobNode?)creationRow.Unit ?? creationRow.Group : null;
         if (RosterGrid.ContextMenu is not ContextMenu menu) return;
         foreach (var old in menu.Items.OfType<MenuItem>().Where(m => Equals(m.Tag, "FieldAction")).ToList()) menu.Items.Remove(old);
         DependencyObject? hit = e.OriginalSource as DependencyObject;

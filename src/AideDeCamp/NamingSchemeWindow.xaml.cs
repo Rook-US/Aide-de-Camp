@@ -257,7 +257,7 @@ public partial class NamingSchemeWindow : Window
     {
         SaveControlsToRule();
         _naming.Settings.Rules = _rules.ToList(); _naming.Save();
-        MessageBox.Show($"Naming rules saved.\n{_naming.SettingsPath}", "Naming Scheme", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show($"Naming rules saved.\n{_naming.SettingsPath}", "Mass Rename / Naming Schemes", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     protected override void OnClosed(EventArgs e)

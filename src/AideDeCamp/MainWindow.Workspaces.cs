@@ -136,8 +136,13 @@ public partial class MainWindow
         bool Match(string name) => name.Contains(search,StringComparison.OrdinalIgnoreCase);
         string faction=_nation==0?"Union":"Confederacy";
         if(_workspace=="Officers") {
+            var navalCommanders = _data.Groups.Values.Where(g => g.UnitTier == 17).Select(g => g.CommanderId).ToHashSet();
+            var assignments = _data.Groups.Values.Select(g => (g.CommanderId, g.Name))
+                .Concat(_data.Units.Select(u => (u.CommanderId, u.Name)))
+                .GroupBy(item => item.CommanderId)
+                .ToDictionary(group => group.Key, group => string.Join("; ", group.Select(item => item.Name)));
             ManagementGrid.ItemsSource=_management.Officers.Where(o=>o.Side==_nation && Match(o.Name)).Select(o=>new {
-                o.Id,o.Name,Rank=OfficerRank(o.Rank,_data.Groups.Values.Any(g=>g.CommanderId==o.Id&&g.UnitTier==17)?4:o.Branch),Branch=OfficerBranch(o.Branch),Command=string.Join("; ",_data.Groups.Values.Where(g=>g.CommanderId==o.Id).Select(g=>g.Name).Concat(_data.Units.Where(u=>u.CommanderId==o.Id).Select(u=>u.Name))),o.Experience,o.Fame,o.Leadership,o.Initiative,o.Administration,o.Cunning,
+                o.Id,o.Name,Rank=OfficerRank(o.Rank,navalCommanders.Contains(o.Id)?4:o.Branch),Branch=OfficerBranch(o.Branch),Command=assignments.GetValueOrDefault(o.Id)??string.Empty,o.Experience,o.Fame,o.Leadership,o.Initiative,o.Administration,o.Cunning,
                 o.Veteran,o.WestPoint,o.Political,o.DateOfRank,TimeInGrade=TimeInGrade(o.DateOfRank),StatusId=o.Status
             }).ToList();
             ManagementSummary.Text=$"{faction} officers • Double-click to edit. Experience, Fame, Leadership, Initiative, Administration and Cunning: 0–100. Select several rows for Batch Edit.";
@@ -209,7 +214,7 @@ public partial class MainWindow
             else {
                 string domain=_workspace=="Economy"?"Funding":_workspace;
                 var records=selected.Select(row=>doc.Records.Single(r=>r.Domain==domain && r.Id==Id(row) && (domain is not ("Weapons" or "Funding") || r.Side==_nation)) with {Name=row.GetType().GetProperty("Name")?.GetValue(row)?.ToString()??"Selected record"}).ToList();
-                if(domain is "Officers" or "Navy" or "Weapons" && (selected.Count>1 || ReferenceEquals(sender,BatchEditButton)))_managementBatches[ManagementSelectionKey]=selected.Select(Id).ToHashSet();
+                if(domain is "Officers" or "Navy" or "Weapons" && selected.Count>1)_managementBatches[ManagementSelectionKey]=selected.Select(Id).ToHashSet();
                 var name=records.Count==1?records[0].Name:$"{records.Count} {domain.ToLowerInvariant()} records";
                 var dialog=new ManagementEditWindow(doc,records,name){Owner=this};if(dialog.ShowDialog()!=true)return;changes=dialog.Changes;
             }

@@ -1,7 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
  <ItemGroup>
+  <Compile Include="../../src/AideDeCamp/Services/UnitCreation.cs" Link="Services/UnitCreation.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/GrandTacticianDataService.Creation.cs" Link="Services/GrandTacticianDataService.Creation.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/SelectionEditPlan.cs" Link="Services/SelectionEditPlan.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/SupplyStockEditPlan.cs" Link="Services/SupplyStockEditPlan.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/SaveMetadata.cs" Link="Services/SaveMetadata.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/AppPaths.cs" Link="Services/AppPaths.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/ManagementBatchPlanner.cs" Link="Services/ManagementBatchPlanner.cs"/>
@@ -27,6 +30,11 @@
   <Compile Include="../../src/AideDeCamp/Services/BatchEditPlanner.cs" Link="Services/BatchEditPlanner.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/OobDisplayModelService.cs" Link="Services/OobDisplayModelService.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/CommandClassificationService.cs" Link="Services/CommandClassificationService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/ExistingGarrisonReferenceService.cs" Link="Services/ExistingGarrisonReferenceService.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/PathRecordParser.cs" Link="Services/PathRecordParser.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/TownLocationParser.cs" Link="Services/TownLocationParser.cs"/>
+  <Compile Include="../../src/AideDeCamp/Services/TownStateMap.cs" Link="Services/TownStateMap.cs"/>
+  <EmbeddedResource Include="../../src/AideDeCamp/Data/TownStates1861.csv" LogicalName="AideDeCamp.Data.TownStates1861.csv" />
   <Compile Include="../../src/AideDeCamp/Services/TextFileBuffer.cs" Link="Services/TextFileBuffer.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/GrandTacticianDataService.cs" Link="Services/GrandTacticianDataService.cs"/>
   <Compile Include="../../src/AideDeCamp/Services/WeaponCompatibilityService.cs" Link="Services/WeaponCompatibilityService.cs"/>

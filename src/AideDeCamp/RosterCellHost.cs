@@ -31,12 +31,25 @@ public sealed class RosterCellHost : ContentControl
             var key = ancestor is DataGridCell cell ? RosterFields.FromColumn(cell.Column?.SortMemberPath) : Field;
             if (!RosterFields.IsSupported(key)) { Content = null; return; }
             Content = window.CreateRosterCell(row, key!, Editing);
-            if (Editing && Content is Control editor) Dispatcher.BeginInvoke(new Action(() => {
-                if (!IsLoaded || !Editing || !ReferenceEquals(Content, editor)) return;
+            var currentContent = Content;
+            if (Editing) Dispatcher.BeginInvoke(new Action(() => {
+                var editor = Content as Control ?? FindEditor(Content as DependencyObject);
+                if (editor is null) return;
+                if (!IsLoaded || !Editing || !ReferenceEquals(Content, currentContent)) return;
                 editor.ApplyTemplate();
                 var text = editor as TextBox ?? (editor is ComboBox combo ? combo.Template.FindName("PART_EditableTextBox", combo) as TextBox : null);
                 if (text is not null) { text.Focus(); text.SelectAll(); } else editor.Focus();
             }), DispatcherPriority.Input);
         } else Content = null;
+    }
+    private static Control? FindEditor(DependencyObject? root) {
+        if (root is null) return null;
+        for (var i = 0; i < VisualTreeHelper.GetChildrenCount(root); i++) {
+            var child = VisualTreeHelper.GetChild(root, i);
+            if (child is TextBox or ComboBox) return (Control)child;
+            var found = FindEditor(child);
+            if (found is not null) return found;
+        }
+        return null;
     }
 }

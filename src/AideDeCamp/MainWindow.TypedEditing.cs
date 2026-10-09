@@ -73,6 +73,10 @@ public partial class MainWindow
         }
         var apply = new Button { Content = "Apply Working Changes", Margin = new Thickness(0,12,0,0) };
         apply.Click += (_, _) => CommitTypedDrafts(); panel.Children.Add(apply);
+        var supplies = new Button { Content = "Edit Supply Stock...", IsEnabled = unit.HasSupplyStock &&
+            unit.PathLinkStatus == PathLinkStatus.Confirmed, Margin = new Thickness(0,6,0,0),
+            ToolTip = "Edit this combat unit's carried stock as a percentage or exact saved amount." };
+        supplies.Click += (_, _) => OpenSupplyEditor(new[] { unit }); panel.Children.Add(supplies);
         var reset = new Button { Content = "Discard this unit's typed drafts" };
         reset.Click += (_, _) => { foreach (var f in draft.Fields.Values) f.Accept(TypedUnitEdit.Read(unit, f.Key)); ValidateDraft(draft); UpdateDirtyState(); };
         panel.Children.Add(reset);
@@ -126,20 +130,34 @@ public partial class MainWindow
         if (editing && field is not null) {
             Control input = row.Unit is CombatUnitNode unit ? (Control)TypedEditor(Draft(unit), key) : GroupNameEditor(row.Group!);
             input.Padding = new Thickness(3, 1, 3, 1);
-            input.Margin = new Thickness(0);
+            input.BorderThickness = new Thickness(1);
+            input.Margin = new Thickness(4, 2, 4, 2);
             input.MinHeight = 24;
             input.VerticalContentAlignment = VerticalAlignment.Center;
-            return input;
+            if (key != "Name") return input;
+            return NameCellContent(row, input);
         }
         var text = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis,
-            Margin = new Thickness(4, 2, 4, 2), FontWeight = key == "Name" ? FontWeights.Bold : FontWeights.Normal };
+            Margin = new Thickness(4, 2, 4, 2), MinHeight = 24, FontWeight = key == "Name" ? FontWeights.Bold : FontWeights.Normal };
         text.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
         var surface = new Border { Child = text };
         if (field is not null) {
             field.NormalForeground = key is "Contract" or "ContractRemaining" && row.Unit is CombatUnitNode contract ? contract.ContractRiskBrush : "#E8EDF2";
             text.SetBinding(TextBlock.ForegroundProperty, new Binding("Foreground") { Source = field });
             text.SetBinding(TextBlock.TextProperty, new Binding("Text") { Source = field });
-            surface.SetBinding(Border.BackgroundProperty, new Binding("Background") { Source = field });
+            var surfaceStyle = new Style(typeof(Border));
+            surfaceStyle.Setters.Add(new Setter(Border.BackgroundProperty, new Binding("Background") { Source = field }));
+            surfaceStyle.Triggers.Add(new DataTrigger {
+                Binding = new Binding("IsSelected") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(DataGridRow), 1) },
+                Value = true,
+                Setters = { new Setter(Border.BackgroundProperty, FindResource("SelectionBrush")) }
+            });
+            surfaceStyle.Triggers.Add(new DataTrigger {
+                Binding = new Binding("IsSelected") { RelativeSource = new RelativeSource(RelativeSourceMode.FindAncestor, typeof(DataGridCell), 1) },
+                Value = true,
+                Setters = { new Setter(Border.BackgroundProperty, FindResource("SelectionBrush")) }
+            });
+            surface.Style = surfaceStyle;
             surface.SetBinding(Border.BorderBrushProperty, new Binding("Border") { Source = field });
             surface.BorderThickness = new Thickness(0, 0, 0, 2);
             surface.SetBinding(ToolTipProperty, new Binding("Help") { Source = field });
@@ -149,15 +167,18 @@ public partial class MainWindow
                 "Contract" => "ContractText", "ContractRemaining" => "ContractRemainingText", "ETA" => "TransferText", _ => "Name" };
             text.SetBinding(TextBlock.TextProperty, new Binding(property) { Source = row });
         }
-        if (key == "Name") {
-            var line = new DockPanel { Margin = new Thickness(Math.Min(row.Depth * RosterRow.HierarchyIndent, 80), 0, 0, 0) };
-            if (row.IsGroup) {
-                var toggle = new Button { Content = row.TreeGlyph, Width = 22, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0), DataContext = row };
-                toggle.Click += RosterToggleGroup_Click; DockPanel.SetDock(toggle, Dock.Left); line.Children.Add(toggle);
-            }
-            line.Children.Add(surface); return line;
-        }
+        if (key == "Name") return NameCellContent(row, surface);
         return surface;
+    }
+    private FrameworkElement NameCellContent(RosterRow row, FrameworkElement content)
+    {
+        var line = new DockPanel { Margin = new Thickness(Math.Min(row.Depth * RosterRow.HierarchyIndent, 80), 0, 0, 0) };
+        if (row.IsGroup) {
+            var toggle = new Button { Content = row.TreeGlyph, Width = 22, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0), DataContext = row };
+            toggle.Click += RosterToggleGroup_Click; DockPanel.SetDock(toggle, Dock.Left); line.Children.Add(toggle);
+        }
+        line.Children.Add(content);
+        return line;
     }
     private bool CommitTypedDrafts()
     {

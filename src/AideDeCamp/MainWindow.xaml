@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:models="clr-namespace:AideDeCamp.Models"
         xmlns:local="clr-namespace:AideDeCamp"
-        Title="Aide-de-Camp 0.8.15" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
+        Title="Aide-de-Camp 0.8.16 — Unit Creation Test Build" Height="950" Width="1700" MinHeight="700" MinWidth="1150"
         Background="#11161C" Foreground="#E8EDF2" KeyDown="Window_KeyDown">
     <Window.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility"/>
@@ -31,7 +31,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <local:NatoCounterControl x:Name="NatoCounterHost" Grid.Row="0" Width="102" Height="70" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-9" UnitType="{Binding NatoUnitType}" UnitTier="{Binding PresentationTier}" IsHeadquarters="True" StrengthAlertColor="#7EAAB2" Panel.ZIndex="2"/>
                 <Border x:Name="CardSurface" Grid.Row="1" Background="{StaticResource ControlBrush}" BorderBrush="{StaticResource EdgeBrush}" BorderThickness="1" CornerRadius="5" Padding="9">
-                    <Border.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"><MenuItem Header="View in Roster" Click="ViewGroupInRoster_Click"/><MenuItem Header="Focus in OOB" Click="FocusNode_Click"/></ContextMenu></Border.ContextMenu>
+                    <Border.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"><MenuItem Header="Create unit here…" Click="CreateUnit_Click"/><Separator/><MenuItem Header="View in Roster" Click="ViewGroupInRoster_Click"/><MenuItem Header="Focus in OOB" Click="FocusNode_Click"/></ContextMenu></Border.ContextMenu>
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <DockPanel x:Name="AlwaysIdentity">
                             <Button DockPanel.Dock="Left" Content="{Binding CollapseGlyph}" Width="26" Height="24" Padding="0" Margin="0,0,7,0" Click="ToggleGroup_Click" ToolTip="Collapse/restore command"/>
@@ -56,7 +56,7 @@
                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <local:NatoCounterControl x:Name="NatoCounterHost" Grid.Row="0" Width="92" Height="70" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,-9" UnitType="{Binding UnitType}" UnitTier="{Binding PresentationTier}" IsHeadquarters="False" StrengthAlertColor="{Binding ReadinessBrush}" Panel.ZIndex="2"/>
                 <Border x:Name="CardSurface" Grid.Row="1" Background="{Binding CardBackground}" BorderBrush="{Binding CardBorder}" BorderThickness="1" CornerRadius="5" Padding="9">
-                    <Border.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"><MenuItem Header="View in Roster" Click="ViewInRoster_Click"/><MenuItem Header="Focus in OOB" Click="FocusNode_Click"/></ContextMenu></Border.ContextMenu>
+                    <Border.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource Self}}"><MenuItem Header="Create sibling unit…" Click="CreateUnit_Click"/><Separator/><MenuItem Header="View in Roster" Click="ViewInRoster_Click"/><MenuItem Header="Focus in OOB" Click="FocusNode_Click"/></ContextMenu></Border.ContextMenu>
                     <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                         <DockPanel x:Name="AlwaysIdentity">
 
@@ -93,7 +93,7 @@
             </StackPanel>
             <Viewbox Grid.Column="1" Stretch="Uniform" StretchDirection="DownOnly" HorizontalAlignment="Right" Margin="12,0,0,0">
             <StackPanel x:Name="FixedActions" Orientation="Horizontal" HorizontalAlignment="Right">
-              <Button Content="Naming Scheme" Click="NamingScheme_Click"/>
+              <Button Content="Mass Rename / Naming Schemes" Click="NamingScheme_Click"/>
               <CheckBox x:Name="RegimentalScaleCheck" Content="Regimental scale" Margin="9,0" VerticalAlignment="Center" Foreground="#DCE4EB" ToolTip="Presentation only; native save tier IDs remain unchanged." Checked="OrganizationScaleChanged" Unchecked="OrganizationScaleChanged"/>
               <Button Content="UI settings" Click="UiSettings_Click"/>
               <Button x:Name="ReviewDataButton" Content="Review data" Click="ReviewData_Click" ToolTip="Review validation issues. Right-click for unclassified records.">
@@ -132,7 +132,7 @@
               <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,4,0"/>
               <TextBox x:Name="SearchBox" Width="200" VerticalContentAlignment="Center" TextChanged="SearchBox_TextChanged" KeyDown="SearchBox_KeyDown"/>
               <Button x:Name="EditSelectedButton" Content="Edit Selected" Click="EditSelected_Click" IsEnabled="False" Margin="8,3,3,3"/>
-              <Button x:Name="BatchEditButton" Content="Batch Edit" Click="BatchEdit_Click" IsEnabled="False"/>
+              <Button Content="Create Unit…" Click="CreateUnit_Click" Margin="3"/><Button x:Name="EditSuppliesButton" Content="Edit Supplies" Click="EditSupplies_Click" IsEnabled="False" Margin="3"/>
               <StackPanel x:Name="LocalViews" Orientation="Horizontal">
                 <Button x:Name="FieldTreeButton" Content="Tree" Click="OobView_Click"/>
                 <Button x:Name="FieldRosterButton" Content="Roster" Click="RosterView_Click"/>
@@ -159,7 +159,7 @@
             <Grid Grid.Column="0">
                 <Grid x:Name="OobViewPanel" Background="#0E141A">
                     <Border x:Name="OobViewport" AllowDrop="True" PreviewDragOver="OobDragOver" PreviewDrop="OobDrop" DragLeave="OobDragLeave" Background="#0E141A" ClipToBounds="True" Focusable="True" PreviewMouseWheel="OobViewport_MouseWheel" MouseDown="OobViewport_MouseDown" MouseMove="OobViewport_MouseMove" MouseUp="OobViewport_MouseUp">
-                        <Grid x:Name="CanvasSurface" ClipToBounds="False">
+                        <Border.ContextMenu><ContextMenu><MenuItem Header="Create independent command…" Click="CreateUnit_Click"/></ContextMenu></Border.ContextMenu><Grid x:Name="CanvasSurface" ClipToBounds="False">
                             <Canvas x:Name="ConnectorCanvas" IsHitTestVisible="False" ClipToBounds="False"/>
                             <Canvas x:Name="NodeCanvas" ClipToBounds="False"/><Canvas x:Name="DragOverlay" IsHitTestVisible="False"/>
                         </Grid>
@@ -185,17 +185,21 @@
                         </StackPanel>
                     </Border>
                     <Border Grid.Row="1" Margin="8,4,8,0" Padding="5" Background="#121920" BorderBrush="#2D3944" BorderThickness="1">
-                        <StackPanel Orientation="Horizontal">
+                        <WrapPanel Orientation="Horizontal">
                             <CheckBox x:Name="FilterHeadquartersCheck" Content="Filter Headquarters" VerticalAlignment="Center" Foreground="#DCE4EB" Checked="RosterFilterChanged" Unchecked="RosterFilterChanged"/>
+                            <Button x:Name="RosterCollapseAllButton" Margin="10,2,2,2" Click="RosterCollapseAll_Click" ToolTip="Collapse or uncollapse all commands in this roster."/>
+                            <Button x:Name="RosterCollapseCorpsButton" Margin="2" Click="RosterCollapseCorps_Click"/>
+                            <Button x:Name="RosterCollapseDivisionsButton" Margin="2" Click="RosterCollapseDivisions_Click"/>
                             <TextBlock Text="  •  Edited cells: " Foreground="#7E8B97" VerticalAlignment="Center" Margin="12,0,0,0"/>
                             <TextBlock Text="● Unsaved" Foreground="#E9B85C" VerticalAlignment="Center"/>
                             <TextBlock Text="   ✓ Saved this session" Foreground="#72B38B" VerticalAlignment="Center"/>
-                        </StackPanel>
+                        </WrapPanel>
                     </Border>
                     <DataGrid Grid.Row="2" x:Name="RosterGrid" ContextMenuOpening="RosterContextOpening" Margin="8" Background="#121920" Foreground="#DCE4EB" RowBackground="#172029" AlternatingRowBackground="#141C24" BorderBrush="#34414D"
-                              AutoGenerateColumns="False" IsReadOnly="True" SelectionMode="Extended" SelectionUnit="CellOrRowHeader" SelectedCellsChanged="RosterCellsChanged" PreviewKeyDown="RosterClipboardKeyDown" GridLinesVisibility="All" HorizontalGridLinesBrush="#28343F" VerticalGridLinesBrush="#28343F"
-                              HeadersVisibility="All" CanUserSortColumns="True" Sorting="RosterGrid_Sorting" SelectionChanged="RosterGrid_SelectionChanged" MouseDoubleClick="RosterGrid_MouseDoubleClick">
-                        <DataGrid.ContextMenu><ContextMenu><MenuItem Header="View in OOB" Click="RosterViewInOob_Click"/><MenuItem Header="Open Detail Card" Click="RosterOpenDetail_Click"/><MenuItem Header="Show Changes for Unit" Click="RosterShowChanges_Click"/><Separator/><MenuItem Header="Batch Edit Selected" Click="BatchEdit_Click"/></ContextMenu></DataGrid.ContextMenu>
+                              AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="CellOrRowHeader" SelectedCellsChanged="RosterCellsChanged" PreviewKeyDown="RosterClipboardKeyDown" GridLinesVisibility="All" HorizontalGridLinesBrush="#28343F" VerticalGridLinesBrush="#28343F"
+                              HeadersVisibility="All" CanUserSortColumns="True" Sorting="RosterGrid_Sorting" SelectionChanged="RosterGrid_SelectionChanged" MouseDoubleClick="RosterGrid_MouseDoubleClick"
+                              EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True">
+                        <DataGrid.ContextMenu><ContextMenu><MenuItem Header="Create unit…" Tag="RosterCreate" Click="CreateUnit_Click"/><Separator/><MenuItem Header="View in OOB" Click="RosterViewInOob_Click"/><MenuItem Header="Open Detail Card" Click="RosterOpenDetail_Click"/><MenuItem Header="Show Changes for Unit" Click="RosterShowChanges_Click"/><Separator/><MenuItem Header="Edit Selected" Click="EditSelected_Click"/></ContextMenu></DataGrid.ContextMenu>
                         <DataGrid.Columns>
                             <DataGridTemplateColumn Header="UNIT / COMMAND" SortMemberPath="Name" Width="240">
                                 <DataGridTemplateColumn.CellTemplate><DataTemplate>
@@ -259,7 +263,7 @@
               <StackPanel x:Name="TreasuryPanel" Orientation="Horizontal" Margin="0,0,0,8" Visibility="Collapsed"><TextBlock x:Name="TreasuryBalanceText" FontWeight="SemiBold" VerticalAlignment="Center"/><Button x:Name="EditTreasuryButton" Margin="12,3,3,3" Content="Edit treasury" Click="EditTreasury_Click"/></StackPanel>
               <StackPanel x:Name="ManagementBatchActions" Orientation="Horizontal" Visibility="Collapsed" Margin="0,0,0,8"><TextBlock Text="Ctrl-click or Shift-click rows to select several" VerticalAlignment="Center"/></StackPanel>
             </StackPanel>
-            <DataGrid x:Name="ManagementGrid" Grid.Row="2" IsReadOnly="True" AutoGenerateColumns="True" AutoGeneratingColumn="ManagementGrid_AutoGeneratingColumn" MouseDoubleClick="ManagementGrid_MouseDoubleClick" SelectionChanged="ManagementSelection_Changed" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="CellOrRowHeader" SelectedCellsChanged="ManagementCellsChanged" PreviewKeyDown="ManagementClipboardKeyDown" RowBackground="#172029" AlternatingRowBackground="#141C24" Foreground="#E8EDF2" Background="#11161C"/>
+            <DataGrid x:Name="ManagementGrid" Grid.Row="2" IsReadOnly="True" AutoGenerateColumns="True" AutoGeneratingColumn="ManagementGrid_AutoGeneratingColumn" MouseDoubleClick="ManagementGrid_MouseDoubleClick" SelectionChanged="ManagementSelection_Changed" CanUserAddRows="False" SelectionMode="Extended" SelectionUnit="CellOrRowHeader" SelectedCellsChanged="ManagementCellsChanged" PreviewKeyDown="ManagementClipboardKeyDown" RowBackground="#172029" AlternatingRowBackground="#141C24" Foreground="#E8EDF2" Background="#11161C" EnableRowVirtualization="True" EnableColumnVirtualization="True" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" ScrollViewer.CanContentScroll="True"/>
             <ScrollViewer x:Name="NationBoardViewport" Grid.Row="2" Visibility="Collapsed" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" SizeChanged="NationBoard_SizeChanged">
               <Grid x:Name="NationBoard"/>
             </ScrollViewer>

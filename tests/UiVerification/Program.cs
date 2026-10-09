@@ -27,6 +27,7 @@ internal static partial class Program
         try {
             var app = new Application { ShutdownMode = ShutdownMode.OnExplicitShutdown };
             app.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("/Aide-de-Camp;component/Themes/Dark.xaml", UriKind.Relative) });
+            if (args.Length == 3 && args[0] == "--creation-ui") { CheckCreationUi(args[1], args[2]); Console.WriteLine($"Creation UI checks passed: {checks}"); app.Shutdown(); return 0; }
             if(args.Length==3 && args[0]=="--population-checks") {
                 var populationWindow=new MainWindow(true);
                 var populationData=(GrandTacticianDataService)typeof(MainWindow).GetField("_data",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(populationWindow)!;
@@ -37,6 +38,9 @@ internal static partial class Program
             if (args.Length == 2 && args[0] == "--tree-evidence") { TreeEvidence(args[1]); return 0; }
             if (args.Length == 2 && args[0] == "--tree-checks") { TreeEvidence(args[1], true); Console.WriteLine($"ALL {checks} TREE CHECKS PASSED"); return 0; }
             if (args.Length == 2 && args[0] == "--tree-performance") { TreePerformance(args[1]); return 0; }
+            if (args.Length == 3 && args[0] == "--roster-performance") {
+                RosterPerformance(args[1], args[2]); app.Shutdown(); return 0;
+            }
             // No installation detection and no access to user save files.
             var window = new MainWindow(true);
             var data = (GrandTacticianDataService)typeof(MainWindow).GetField("_data", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
@@ -45,22 +49,45 @@ internal static partial class Program
             var units = (List<CombatUnitNode>)data.Units;
             for (int i = 0; i < 150; i++) units.Add(new CombatUnitNode { UnitId = i + 1, EditorOrder = i, Name = $"{i + 1}th Ohio Infantry", Nation = 0, ParentId = 1, UnitType = 0, UnitTier = 13,
                 TotalMenRaw = 1000 + i, HomeStateName = "Ohio", StateId = 29, CommanderDisplayName = "BG Test Officer", WeaponName = "Test musket", ContractMonths = 12 });
+            units[0].PathLinkStatus = PathLinkStatus.Confirmed;
+            units[0].PathSupplyStockLineIndex = 10;
+            units[0].RestoreSupplyStock(500, 1000, 500, 1000);
             typeof(MainWindow).GetMethod("RebuildSide", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { true });
             var rosterPanel = (UIElement)window.FindName("RosterViewPanel"); rosterPanel.Visibility = Visibility.Visible;
             ((UIElement)window.FindName("OobViewPanel")).Visibility = Visibility.Collapsed;
             var grid = (DataGrid)window.FindName("RosterGrid");
             window.Show(); Flush(window);
+            var stockFixture = new CombatUnitNode { Name = "Supply UI fixture", UnitType = 0,
+                TotalMenRaw = 1000, PathLinkStatus = PathLinkStatus.Confirmed,
+                PathSupplyStockLineIndex = 10, IsLandAsset = true };
+            stockFixture.RestoreSupplyStock(500, 1000, 500, 1000);
+            var stockWindow = new SupplyStockEditWindow(new[] { stockFixture }, false) { Owner = window };
+            stockWindow.Show(); Flush(stockWindow);
+            var stockBoxes = Descendants(stockWindow).OfType<TextBox>().ToArray();
+            Check(stockBoxes.Length == 4 && stockWindow.Plan is { CanApply: false },
+                "Supply editor shows four categories without staging an implicit change");
+            stockBoxes[0].Text = "40"; Flush(stockWindow);
+            Check(stockWindow.Plan is { CanApply: true } && stockWindow.Plan.Changes.Count == 1 &&
+                stockWindow.Plan.Changes[0].Amount == 400,
+                "Supply percentage entry previews the exact stock amount before staging");
+            stockWindow.Close();
             var row = grid.Items.OfType<RosterRow>().First(r => r.Unit == units[0]);
             grid.ScrollIntoView(row); grid.SelectedItem = row; Flush(window);
+            Check(((Button)window.FindName("EditSuppliesButton")).IsEnabled,
+                "Confirmed selected combat unit enables the supply editor from the roster");
             foreach (var key in new[] { "Name", "FieldStrength", "Casualties", "HomeStateName", "Experience" }) {
                 var column = grid.Columns.Single(c => c.SortMemberPath == key);
                 grid.ScrollIntoView(row, column); Flush(window);
                 var content = column.GetCellContent(row)!;
+                var displayBounds=content.TransformToAncestor(window).TransformBounds(new Rect(content.RenderSize));
                 var text = Descendants(content).OfType<TextBlock>().First(t => !string.IsNullOrEmpty(t.Text));
                 Check(text.ActualHeight >= text.FontSize && text.ActualWidth > 0, key + " text has measurable, unclipped row height");
                 Check(text.Foreground is SolidColorBrush brush && brush.Color.R > 150, key + " has readable light foreground");
                 grid.CurrentCell = new DataGridCellInfo(row, column); grid.BeginEdit(); Flush(window);
-                Check(Descendants(column.GetCellContent(row)!).Any(d => d is TextBox or ComboBox), key + " enters typed edit mode");
+                var editContent=column.GetCellContent(row)!;
+                var editBounds=editContent.TransformToAncestor(window).TransformBounds(new Rect(editContent.RenderSize));
+                Check(Descendants(editContent).Any(d => d is TextBox or ComboBox), key + " enters typed edit mode");
+                Check(Math.Abs(displayBounds.X-editBounds.X)<1 && Math.Abs(displayBounds.Width-editBounds.Width)<1 && Math.Abs(displayBounds.Height-editBounds.Height)<1,key+" cell stays in place and the same size while editing");
                 grid.CommitEdit(DataGridEditingUnit.Cell, true); Flush(window);
             }
             var weaponColumn = grid.Columns.Single(c => c.SortMemberPath == "WeaponName");
@@ -109,6 +136,49 @@ internal static partial class Program
             for (int i = 0; i < 12; i++) units.Add(new CombatUnitNode { UnitId = 200 + i, Name = "Stack fixture " + i, Nation = 0,
                 ParentId = i < 4 ? 2 : i < 8 ? 3 : 5, UnitType = 0, UnitTier = 13, TotalMenRaw = 1000 });
             typeof(MainWindow).GetMethod("RebuildSide", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { true });
+            typeof(MainWindow).GetMethod("SetView", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { true }); Flush(window);
+            var allCollapse = (Button)window.FindName("RosterCollapseAllButton");
+            var corpsCollapse = (Button)window.FindName("RosterCollapseCorpsButton");
+            var divisionsCollapse = (Button)window.FindName("RosterCollapseDivisionsButton");
+            Check(allCollapse.Content?.ToString() == "Collapse All" && corpsCollapse.Content?.ToString() == "Collapse Corps" &&
+                divisionsCollapse.Content?.ToString() == "Collapse Division", "Roster collapse controls show native command tiers");
+            var rosterChanges = 0;
+            var rowCollection = (System.Collections.Specialized.INotifyCollectionChanged)typeof(MainWindow)
+                .GetField("_rosterRows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+            rowCollection.CollectionChanged += (_, _) => rosterChanges++;
+            allCollapse.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush(window);
+            Check(rosterChanges == 1 && !grid.Items.OfType<RosterRow>().Any(r => r.Unit == units[0]) &&
+                allCollapse.Content?.ToString() == "Uncollapse All", "Collapse All updates the roster in one notification");
+            allCollapse.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush(window);
+            Check(rosterChanges == 2 && grid.Items.OfType<RosterRow>().Any(r => r.Unit == units[0]),
+                "Uncollapse All restores combat units in one notification");
+            corpsCollapse.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush(window);
+            Check(!corps.IsExpanded && !grid.Items.OfType<RosterRow>().Any(r => r.Unit?.UnitId == 200),
+                "Corps control hides only descendants of native Corps commands");
+            corpsCollapse.RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush(window);
+            OobPresentation.RegimentalScale = true;
+            typeof(MainWindow).GetMethod("UpdateRosterCollapseButtons", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null);
+            Check(corpsCollapse.Content?.ToString() == "Collapse Division" &&
+                divisionsCollapse.Content?.ToString() == "Collapse Brigade" &&
+                corpsCollapse.ToolTip?.ToString()?.Contains("division commands") == true,
+                "Regimental scale updates tier labels and tooltips without changing native targets");
+            OobPresentation.RegimentalScale = false;
+            ((Button)window.FindName("RosterFlatButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)); Flush(window);
+            Check(!allCollapse.IsEnabled && !corpsCollapse.IsEnabled && !divisionsCollapse.IsEnabled,
+                "Hierarchy controls are disabled in flat roster view");
+            ((Button)window.FindName("RosterListingButton")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var headquartersFilter = (CheckBox)window.FindName("FilterHeadquartersCheck");
+            headquartersFilter.IsChecked = true;
+            typeof(MainWindow).GetMethod("RefreshRoster", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null); Flush(window);
+            Check(!allCollapse.IsEnabled && !corpsCollapse.IsEnabled && !divisionsCollapse.IsEnabled,
+                "Hierarchy controls are disabled when headquarters are filtered out");
+            headquartersFilter.IsChecked = false;
+            typeof(MainWindow).GetMethod("RefreshRoster", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, null); Flush(window);
+            Check((bool)typeof(MainWindow).GetField("_oobVisibilityDirty", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!,
+                "Roster expansion defers hidden Tree layout");
+            typeof(MainWindow).GetMethod("SetView", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { false });
+            Check(!(bool)typeof(MainWindow).GetField("_oobVisibilityDirty", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!,
+                "Opening Tree refreshes its deferred command layout");
             rosterPanel.Visibility = Visibility.Collapsed; ((UIElement)window.FindName("OobViewPanel")).Visibility = Visibility.Visible; Flush(window);
             double Geometry(string name, OobNode node) => (double)typeof(MainWindow).GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { node })!;
             Check(Geometry("GetNodeWidth", hq) > Geometry("GetNodeWidth", corps) && Geometry("GetNodeWidth", corps) > Geometry("GetNodeWidth", division) && Geometry("GetNodeWidth", division) > Geometry("GetNodeWidth", units[0]), "Measured native tiers have descending widths");
@@ -185,9 +255,9 @@ internal static partial class Program
             batch.Close();
             Invoke("OpenWorkspace",0,"Armies");Invoke("SetView",true);
             var fixedActions=(StackPanel)window.FindName("FixedActions");
-            Check(fixedActions.Children.OfType<ContentControl>().Select(c=>c.Content?.ToString()).SequenceEqual(new[]{"Naming Scheme","Regimental scale","UI settings","Review data","Save changes"}),"Fixed actions follow the requested order");
-            var search=(TextBox)window.FindName("SearchBox");var editSelected=(Button)window.FindName("EditSelectedButton");var batchButton=(Button)window.FindName("BatchEditButton");
-            Check(search.TransformToAncestor(window).Transform(new Point()).X<editSelected.TransformToAncestor(window).Transform(new Point()).X && editSelected.TransformToAncestor(window).Transform(new Point()).X<batchButton.TransformToAncestor(window).Transform(new Point()).X,"Search and Edit Selected keep their shared left toolbar position");
+            Check(fixedActions.Children.OfType<ContentControl>().Select(c=>c.Content?.ToString()).SequenceEqual(new[]{"Mass Rename / Naming Schemes","Regimental scale","UI settings","Review data","Save changes"}),"Fixed actions follow the requested order");
+            var search=(TextBox)window.FindName("SearchBox");var editSelected=(Button)window.FindName("EditSelectedButton");
+            Check(search.TransformToAncestor(window).Transform(new Point()).X<editSelected.TransformToAncestor(window).Transform(new Point()).X,"Search and Edit Selected keep their shared left toolbar position");
             foreach(var fontScale in new[]{.65,1,2}) foreach(var width in new[]{1150d,1700d}) {
                 ui.Set("theme.text.scale",fontScale);applySettings.Invoke(window,null);
                 window.Width=width;Flush(window);
@@ -269,5 +339,65 @@ internal static partial class Program
             typeof(MainWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, true);
             window.Close(); app.Shutdown(); return 0;
         } catch (Exception ex) { Console.Error.WriteLine(ex); return 1; }
+    }
+
+    private static void RosterPerformance(string saveDirectory, string configDirectory)
+    {
+        var window = new MainWindow(true);
+        var data = (GrandTacticianDataService)typeof(MainWindow).GetField("_data", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+        data.LoadAsync(saveDirectory, configDirectory).GetAwaiter().GetResult();
+        window.Show();
+        typeof(MainWindow).GetMethod("RebuildSide", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { true });
+        typeof(MainWindow).GetMethod("SetView", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, new object[] { true });
+        Flush(window);
+        var grid = (DataGrid)window.FindName("RosterGrid");
+        Console.WriteLine($"Loaded roster: {data.Groups.Count} commands, {data.Units.Count} units, {grid.Items.Count} visible rows");
+        foreach (var name in new[] { "RosterCollapseAllButton", "RosterCollapseCorpsButton", "RosterCollapseDivisionsButton" })
+        {
+            var button = (Button)window.FindName(name);
+            if (!button.IsEnabled) continue;
+            for (var pass = 0; pass < 2; pass++)
+            {
+                var label = button.Content;
+                var timer = System.Diagnostics.Stopwatch.StartNew();
+                button.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                Flush(window);
+                timer.Stop();
+                Console.WriteLine($"{label}: {timer.ElapsedMilliseconds} ms, {grid.Items.Count} visible rows");
+            }
+        }
+        var rosterRows = (BulkObservableCollection<RosterRow>)typeof(MainWindow)
+            .GetField("_rosterRows", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(window)!;
+        var snapshot = rosterRows.ToArray();
+        var oldNotifications = 0;
+        void CountOld(object? _, System.Collections.Specialized.NotifyCollectionChangedEventArgs __) => oldNotifications++;
+        rosterRows.CollectionChanged += CountOld;
+        var oldTimer = System.Diagnostics.Stopwatch.StartNew();
+        rosterRows.Clear();
+        foreach (var row in snapshot) rosterRows.Add(row);
+        Flush(window);
+        oldTimer.Stop();
+        rosterRows.CollectionChanged -= CountOld;
+        var newNotifications = 0;
+        void CountNew(object? _, System.Collections.Specialized.NotifyCollectionChangedEventArgs __) => newNotifications++;
+        rosterRows.CollectionChanged += CountNew;
+        var newTimer = System.Diagnostics.Stopwatch.StartNew();
+        rosterRows.ReplaceWith(snapshot);
+        Flush(window);
+        newTimer.Stop();
+        rosterRows.CollectionChanged -= CountNew;
+        Console.WriteLine($"Same {snapshot.Length} rows: individual updates {oldTimer.ElapsedMilliseconds} ms / {oldNotifications} notifications; one replacement {newTimer.ElapsedMilliseconds} ms / {newNotifications} notification");
+        foreach (var workspace in new[] { "Officers", "Weapons", "Navy", "Economy" })
+        {
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            typeof(MainWindow).GetMethod("OpenWorkspace", BindingFlags.Instance | BindingFlags.NonPublic)!
+                .Invoke(window, new object[] { 0, workspace });
+            Flush(window);
+            timer.Stop();
+            var managementRows = ((DataGrid)window.FindName("ManagementGrid")).Items.Count;
+            Console.WriteLine($"{workspace} first view: {timer.ElapsedMilliseconds} ms, {managementRows} rows");
+        }
+        typeof(MainWindow).GetField("_allowClose", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(window, true);
+        window.Close();
     }
 }
